@@ -572,20 +572,25 @@ struct stbtt_pack_context {
    void  *nodes;
 };
 
-//////////////////////////////////////////////////////////////////////////////
-//
-// FONT LOADING
-//
-//
+""".}
 
-extern int stbtt_GetFontOffsetForIndex(const unsigned char *data, int index);
-// Each .ttf/.ttc file may have more than one font. Each font has a sequential
-// index number starting from 0. Call this function to get the font offset for
-// a given index; it returns -1 if the index is out of range. A regular .ttf
-// file will only define one font and it always be at offset 0, so it will
-// return '0' for index 0, and -1 for all other indices. You can just skip
-// this step if you know it's that kind of font.
+################################################################
+#
+# FONT LOADING
+#
+#
+type font_type {.unchecked.} = array[0, uint8]
 
+proc stbtt_GetFontOffsetForIndex(font_collection: font_type, index: cint): cint {.exportc.}
+
+# Each .ttf/.ttc file may have more than one font. Each font has a sequential
+# index number starting from 0. Call this function to get the font offset for
+# a given index; it returns -1 if the index is out of range. A regular .ttf
+# file will only define one font and it always be at offset 0, so it will
+# return '0' for index 0, and -1 for all other indices. You can just skip
+# this step if you know it's that kind of font.
+
+{.emit: """
 
 // The following structure is defined publically so you can declare one on
 // the stack or as a global or etc, but you should treat it as opaque.
@@ -678,7 +683,7 @@ enum
     STBTT_vmove = 1, 
     STBTT_vline,
     STBTT_vcurve
-    };
+};
 
 typedef short stbtt_vertex_type;
 
@@ -902,71 +907,57 @@ typedef int stbtt__test_oversample_pow2[(STBTT_MAX_OVERSAMPLE & (STBTT_MAX_OVERS
 // on platforms that don't allow misaligned reads, if we want to allow
 // truetype fonts that aren't padded to alignment, define ALLOW_UNALIGNED_TRUETYPE
 
-#define ttBYTE(p)     (* (stbtt_uint8 *) (p))
-#define ttCHAR(p)     (* (stbtt_int8 *) (p))
-#define ttFixed(p)    ttLONG(p)
+""".}
 
-#if defined(STB_TRUETYPE_BIGENDIAN) && !defined(ALLOW_UNALIGNED_TRUETYPE)
 
-   #define ttUSHORT(p)   (* (stbtt_uint16 *) (p))
-   #define ttSHORT(p)    (* (stbtt_int16 *) (p))
-   #define ttULONG(p)    (* (stbtt_uint32 *) (p))
-   #define ttLONG(p)     (* (stbtt_int32 *) (p))
+proc ttBYTE(p: font_type): uint8 {.exportc.} = p[0]
+proc ttCHAR(p: font_type): int8 {.exportc.} = cast[int8](p[0])
 
-#else
+proc ttUSHORT(p: font_type): uint16 {.exportc.} = (p[0].uint16 * 256) + p[1].uint16
+proc ttUSHORT(p: openarray[uint8], idx: int): uint16 = (p[idx].uint16 * 256) + p[idx + 1].uint16
+proc ttSHORT(p: font_type): int16 {.exportc.} = (p[0].int16 * 256) + p[1].int16
 
-   stbtt_uint16 ttUSHORT(const stbtt_uint8 *p) { return p[0]*256 + p[1]; }
-   stbtt_int16 ttSHORT(const stbtt_uint8 *p)   { return p[0]*256 + p[1]; }
-   stbtt_uint32 ttULONG(const stbtt_uint8 *p)  { return (p[0]<<24) + (p[1]<<16) + (p[2]<<8) + p[3]; }
-   stbtt_int32 ttLONG(const stbtt_uint8 *p)    { return (p[0]<<24) + (p[1]<<16) + (p[2]<<8) + p[3]; }
+proc ttULONG(p: font_type): uint32 {.exportc.} = (p[0].uint32 shl 24) + (p[1].uint32 shl 16) + (p[2].uint32 shl 8) + p[3].uint32
+proc ttULONG(p: openarray[uint8], idx: int): uint32 = (p[idx].uint32 shl 24) + (p[idx + 1].uint32 shl 16) + (p[idx + 2].uint32 shl 8) + p[idx + 3].uint32
 
-#endif
+proc ttLONG(p: openarray[uint8], idx: int): int32 = (p[idx].int32 shl 24) + (p[idx + 1].int32 shl 16) + (p[idx + 2].int32 shl 8) + p[idx + 3].int32
 
-#define stbtt_tag4(p,c0,c1,c2,c3) ((p)[0] == (c0) && (p)[1] == (c1) && (p)[2] == (c2) && (p)[3] == (c3))
-#define stbtt_tag(p,str)           stbtt_tag4(p,str[0],str[1],str[2],str[3])
 
-static int stbtt__isfont(const stbtt_uint8 *font)
-{
-   // check the version number
-   if (stbtt_tag4(font, '1',0,0,0))  return 1; // TrueType 1
-   if (stbtt_tag(font, "typ1"))   return 1; // TrueType with type 1 font -- we don't support this!
-   if (stbtt_tag(font, "OTTO"))   return 1; // OpenType with CFF
-   if (stbtt_tag4(font, 0,1,0,0)) return 1; // OpenType 1.0
-   return 0;
-}
+proc stbtt_tag4(p: openarray[uint8], idx: int, c0, c1, c2, c3: char): bool =
+    p[idx].char == c0 and p[idx + 1].char == c1 and p[idx + 2].char == c2 and p[idx + 3].char == c3
 
-// @OPTIMIZE: binary search
-static stbtt_uint32 stbtt__find_table(stbtt_uint8 *data, stbtt_uint32 fontstart, const char *tag)
-{
-   stbtt_int32 num_tables = ttUSHORT(data+fontstart+4);
-   stbtt_uint32 tabledir = fontstart + 12;
-   stbtt_int32 i;
-   for (i=0; i < num_tables; ++i) {
-      stbtt_uint32 loc = tabledir + 16*i;
-      if (stbtt_tag(data+loc+0, tag))
-         return ttULONG(data+loc+8);
-   }
-   return 0;
-}
+proc stbtt_tag(p: openarray[uint8], idx: int, str: cstring): bool =
+    stbtt_tag4(p, idx, str[0], str[1], str[2], str[3])
 
-int stbtt_GetFontOffsetForIndex(const unsigned char *font_collection, int index)
-{
-   // if it's just a font, there's only one valid index
-   if (stbtt__isfont(font_collection))
-      return index == 0 ? 0 : -1;
+proc stbtt_isfont(font: font_type): bool {.exportc.} =
+    stbtt_tag4(font, 0, '1', 0.char, 0.char, 0.char) or stbtt_tag(font, 0, "typ1") or
+        stbtt_tag(font, 0, "OTTO") or stbtt_tag4(font, 0, 0.char, 1.char, 0.char, 0.char)
 
-   // check if it's a TTC
-   if (stbtt_tag(font_collection, "ttcf")) {
-      // version 1?
-      if (ttULONG(font_collection+4) == 0x00010000 || ttULONG(font_collection+4) == 0x00020000) {
-         stbtt_int32 n = ttLONG(font_collection+8);
-         if (index >= n)
-            return -1;
-         return ttULONG(font_collection+12+index*14);
-      }
-   }
-   return -1;
-}
+# @OPTIMIZE: binary search
+proc stbtt_find_table(data: font_type, fontstart: uint32, tag: cstring): uint32 {.exportc.} =
+    let numTables = ttUSHORT(data, fontstart.int + 4).int
+    let tabledir = fontstart + 12
+    for i in 0 .. numTables:
+        let loc = tabledir.int + 16 * i
+        if stbtt_tag(data, loc + 0, tag):
+            return ttULONG(data, loc + 8)
+
+proc stbtt_GetFontOffsetForIndex(font_collection: font_type, index: cint): cint =
+    # if it's just a font, there's only one valid index
+    if stbtt_isfont(font_collection):
+        return if index == 0: 0 else: -1
+
+    #  check if it's a TTC
+    if stbtt_tag(font_collection, 0, "ttcf"):
+        # version 1?
+        if ttULONG(font_collection, 4) == 0x00010000 or ttULONG(font_collection, 4) == 0x00020000:
+            let n = ttLONG(font_collection, 8)
+            if index >= n:
+                return -1
+            return ttULONG(font_collection, 12 + index * 14).cint
+    return -1
+
+{.emit: """
 
 int stbtt_InitFont(stbtt_fontinfo *info, const unsigned char *data2, int fontstart)
 {
@@ -977,17 +968,17 @@ int stbtt_InitFont(stbtt_fontinfo *info, const unsigned char *data2, int fontsta
    info->data = data;
    info->fontstart = fontstart;
 
-   cmap = stbtt__find_table(data, fontstart, "cmap");       // required
-   info->loca = stbtt__find_table(data, fontstart, "loca"); // required
-   info->head = stbtt__find_table(data, fontstart, "head"); // required
-   info->glyf = stbtt__find_table(data, fontstart, "glyf"); // required
-   info->hhea = stbtt__find_table(data, fontstart, "hhea"); // required
-   info->hmtx = stbtt__find_table(data, fontstart, "hmtx"); // required
-   info->kern = stbtt__find_table(data, fontstart, "kern"); // not required
+   cmap = stbtt_find_table(data, fontstart, "cmap");       // required
+   info->loca = stbtt_find_table(data, fontstart, "loca"); // required
+   info->head = stbtt_find_table(data, fontstart, "head"); // required
+   info->glyf = stbtt_find_table(data, fontstart, "glyf"); // required
+   info->hhea = stbtt_find_table(data, fontstart, "hhea"); // required
+   info->hmtx = stbtt_find_table(data, fontstart, "hmtx"); // required
+   info->kern = stbtt_find_table(data, fontstart, "kern"); // not required
    if (!cmap || !info->loca || !info->head || !info->glyf || !info->hhea || !info->hmtx)
       return 0;
 
-   t = stbtt__find_table(data, fontstart, "maxp");
+   t = stbtt_find_table(data, fontstart, "maxp");
    if (t)
       info->numGlyphs = ttUSHORT(data+t+4);
    else
@@ -1826,7 +1817,7 @@ proc stbtt_FlattenCurves(vertices: openarray[stbtt_vertex], objspace_flatness: c
     var num_points : cint = 0
 
     let objspace_flatness_squared = objspace_flatness * objspace_flatness
-    var i, n, start: cint
+    var n, start: cint
 
     # count how many "moves" there are to get the contour count
     for v in vertices:
@@ -2067,6 +2058,8 @@ proc stbtt_GetBakedQuad*(chardata: openarray[stbtt_bakedchar], pw, ph: int,  # s
 
     xpos += b.xadvance
 
+type stbrp_coord = cint
+
 {.emit: """
 
 //////////////////////////////////////////////////////////////////////////////
@@ -2094,54 +2087,44 @@ typedef int stbrp_coord;
 //                                                                                //
 ////////////////////////////////////////////////////////////////////////////////////
 
-typedef struct
-{
-   int width,height;
-   int x,y,bottom_y;
-} stbrp_context;
+""".}
 
-typedef struct
-{
-   unsigned char x;
-} stbrp_node;
+type stbrp_context {.exportc.} = object
+    width,height: cint
+    x, y, bottom_y: cint
 
-typedef struct
-{
-   stbrp_coord x,y;
-   int id,w,h,was_packed;
-} stbrp_rect;
+type stbrp_node {.exportc.} = object
+    x: uint8
 
-static void stbrp_init_target(stbrp_context *con, int pw, int ph, stbrp_node *nodes, int num_nodes)
-{
-   con->width  = pw;
-   con->height = ph;
-   con->x = 0;
-   con->y = 0;
-   con->bottom_y = 0;
-   STBTT__NOTUSED(nodes);
-   STBTT__NOTUSED(num_nodes);   
-}
+type stbrp_rect {.exportc.} = object
+    x, y: stbrp_coord
+    id, w, h, was_packed: cint
 
-static void stbrp_pack_rects(stbrp_context *con, stbrp_rect *rects, int num_rects)
-{
-   int i;
-   for (i=0; i < num_rects; ++i) {
-      if (con->x + rects[i].w > con->width) {
-         con->x = 0;
-         con->y = con->bottom_y;
-      }
-      if (con->y + rects[i].h > con->height)
-         break;
-      rects[i].x = con->x;
-      rects[i].y = con->y;
-      rects[i].was_packed = 1;
-      con->x += rects[i].w;
-      if (con->y + rects[i].h > con->bottom_y)
-         con->bottom_y = con->y + rects[i].h;
-   }
-   for (   ; i < num_rects; ++i)
-      rects[i].was_packed = 0;
-}
+proc stbrp_init_target(con: ptr stbrp_context, pw, ph: cint, nodes: openarray[stbrp_node]) {.exportc.} =
+    con.width = pw
+    con.height = ph
+    con.x = 0
+    con.y = 0
+    con.bottom_y = 0
+
+proc stbrp_pack_rects(con: var stbrp_context, rects: var openarray[stbrp_rect]) {.exportc.} =
+    for r in rects.mitems:
+        if con.x + r.w > con.width:
+            con.x = 0
+            con.y = con.bottom_y
+
+        if con.y + r.h > con.height:
+            break
+        r.x = con.x
+        r.y = con.y
+        r.was_packed = 1
+        con.x += r.w
+        if con.y + r.h > con.bottom_y:
+            con.bottom_y = con.y + r.h
+
+
+{.emit: """
+
 #endif
 
 //////////////////////////////////////////////////////////////////////////////
@@ -2309,7 +2292,7 @@ static void stbtt__v_prefilter(unsigned char *pixels, int w, int h, int stride_i
 
 """.}
 
-proc stbtt_oversample_shift(oversample: int): float {.exportc.} =
+proc stbtt_oversample_shift(oversample: cint): float {.exportc.} =
     if oversample != 0:
         # The prefilter is a box filter of width "oversample",
         # which shifts phase by (oversample - 1)/2 pixels in
@@ -2342,7 +2325,8 @@ int stbtt_PackFontRanges(stbtt_pack_context *spc, unsigned char *fontdata, int f
    for (i=0; i < num_ranges; ++i)
       n += ranges[i].num_chars_in_range;
          
-   rects = (stbrp_rect *) STBTT_malloc(sizeof(*rects) * n, spc->user_allocator_context);
+   rects = (stbrp_rect *) calloc(n, sizeof(*rects));
+
    if (rects == NULL)
       return 0;
 
@@ -2524,7 +2508,7 @@ const char *stbtt_GetFontNameString(const stbtt_fontinfo *font, int *length, int
    stbtt_int32 i,count,stringOffset;
    stbtt_uint8 *fc = font->data;
    stbtt_uint32 offset = font->fontstart;
-   stbtt_uint32 nm = stbtt__find_table(fc, offset, "name");
+   stbtt_uint32 nm = stbtt_find_table(fc, offset, "name");
    if (!nm) return NULL;
 
    count = ttUSHORT(fc+nm+2);
@@ -2591,15 +2575,15 @@ static int stbtt__matches(stbtt_uint8 *fc, stbtt_uint32 offset, stbtt_uint8 *nam
 {
    stbtt_int32 nlen = (stbtt_int32) STBTT_strlen((char *) name);
    stbtt_uint32 nm,hd;
-   if (!stbtt__isfont(fc+offset)) return 0;
+   if (!stbtt_isfont(fc+offset)) return 0;
 
    // check italics/bold/underline flags in macStyle...
    if (flags) {
-      hd = stbtt__find_table(fc, offset, "head");
+      hd = stbtt_find_table(fc, offset, "head");
       if ((ttUSHORT(fc+hd+44) & 7) != (flags & 7)) return 0;
    }
 
-   nm = stbtt__find_table(fc, offset, "name");
+   nm = stbtt_find_table(fc, offset, "name");
    if (!nm) return 0;
 
    if (flags) {
