@@ -694,9 +694,7 @@ type STBTT_type {.exportc.} = enum
     STBTT_vline
     STBTT_vcurve
 
-type stbtt_vertex_type {.exportc.} = int16
-
-proc dummy(a: stbtt_vertex_type) = discard
+type stbtt_vertex_type = int16
 
 type stbtt_vertex {.exportc.} = object
     x, y, cx, cy: stbtt_vertex_type
@@ -1113,14 +1111,16 @@ int stbtt_GetCodepointShape(const stbtt_fontinfo *info, int unicode_codepoint, s
    return stbtt_GetGlyphShape(info, stbtt_FindGlyphIndex(info, unicode_codepoint), vertices);
 }
 
-static void stbtt_setvertex(stbtt_vertex *v, stbtt_uint8 type, stbtt_int32 x, stbtt_int32 y, stbtt_int32 cx, stbtt_int32 cy)
-{
-   v->type = type;
-   v->x = (stbtt_int16) x;
-   v->y = (stbtt_int16) y;
-   v->cx = (stbtt_int16) cx;
-   v->cy = (stbtt_int16) cy;
-}
+""".}
+
+proc stbtt_setvertex(v: var stbtt_vertex, t: STBTT_type, x, y, cx, cy: int32) {.exportc.} =
+    v.`type` = t
+    v.x = x.int16
+    v.y = y.int16
+    v.cx = cx.int16
+    v.cy = cy.int16
+
+{.emit: """
 
 static int stbtt__GetGlyfOffset(const stbtt_fontinfo *info, int glyph_index)
 {
