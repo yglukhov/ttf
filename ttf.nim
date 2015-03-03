@@ -2,6 +2,8 @@
 import math
 import unsigned
 
+proc malloc(size: int): pointer {.header:"<stdlib.h>".}
+
 {.emit: """
 
 #define STB_TRUETYPE_IMPLEMENTATION
@@ -671,23 +673,32 @@ extern int  stbtt_GetGlyphBox(const stbtt_fontinfo *info, int glyph_index, int *
 // the bitmaps for C declaration-order reasons)
 //
 
-#ifndef STBTT_vmove // you can predefine these to use different values (but why?)
-   enum {
-      STBTT_vmove=1,
-      STBTT_vline,
-      STBTT_vcurve
-   };
-#endif
+enum
+{
+    STBTT_vmove = 1, 
+    STBTT_vline,
+    STBTT_vcurve
+    };
 
-#ifndef stbtt_vertex // you can predefine this to use different values
-                   // (we share this with other code at RAD)
-   #define stbtt_vertex_type short // can't use stbtt_int16 because that's not visible in the header file
-   typedef struct
-   {
-      stbtt_vertex_type x,y,cx,cy;
-      unsigned char type,padding;
-   } stbtt_vertex;
-#endif
+typedef short stbtt_vertex_type;
+
+""".}
+
+type STBTT_type {.exportc.} = enum
+    STBTT_vmove = 1
+    STBTT_vline
+    STBTT_vcurve
+
+type stbtt_vertex_type {.exportc.} = int16
+
+proc dummy(a: stbtt_vertex_type) = discard
+
+type stbtt_vertex {.exportc.} = object
+    x, y, cx, cy: stbtt_vertex_type
+    `type`: STBTT_type
+    padding: uint8
+
+{.emit: """
 
 extern int stbtt_IsGlyphEmpty(const stbtt_fontinfo *info, int glyph_index);
 // returns non-zero if nothing is drawn for this glyph
@@ -1529,47 +1540,47 @@ void stbtt_GetCodepointBitmapBox(const stbtt_fontinfo *font, int codepoint, floa
 {
    stbtt_GetCodepointBitmapBoxSubpixel(font, codepoint, scale_x, scale_y,0.0f,0.0f, ix0,iy0,ix1,iy1);
 }
+""".}
 
-typedef struct stbtt__edge {
-   float x0,y0, x1,y1;
-   int invert;
-} stbtt__edge;
+type stbtt_edge {.exportc.} = object
+    x0,y0, x1,y1: cfloat
+    invert: cint
 
-typedef struct stbtt__active_edge
-{
-   int x,dx;
-   float ey;
-   struct stbtt__active_edge *next;
-   int valid;
-} stbtt__active_edge;
+type stbtt_active_edge {.exportc.} = object
+    x, dx: cint
+    ey: cfloat
+    next: ptr stbtt_active_edge
+    valid: cint
+
+const FIXSHIFT = 10
+const FIX = 1 shl FIXSHIFT
+const FIXMASK = FIX - 1
+
+proc new_active(e: ptr stbtt_edge, off_x: cint, start_point: cfloat, userdata: pointer): ptr stbtt_active_edge {.exportc.} =
+    result = cast[ptr stbtt_active_edge](malloc(sizeof(stbtt_active_edge))) # @TODO: make a pool of these!!!
+    let dxdy = (e.x1 - e.x0) / (e.y1 - e.y0)
+    assert(e.y0 <= start_point)
+    # round dx down to avoid going too far
+    if dxdy < 0:
+        result.dx = -floor(FIX * -dxdy).cint
+    else:
+        result.dx = floor(FIX * dxdy).cint
+    result.x = floor(FIX * (e.x0 + dxdy * (start_point - e.y0))).cint
+    result.x -= off_x * FIX
+    result.ey = e.y1
+    result.next = nil
+    result.valid = if e.invert != 0: 1 else: -1
+
+{.emit: """
 
 #define FIXSHIFT   10
 #define FIX        (1 << FIXSHIFT)
 #define FIXMASK    (FIX-1)
 
-static stbtt__active_edge *new_active(stbtt__edge *e, int off_x, float start_point, void *userdata)
-{
-   stbtt__active_edge *z = (stbtt__active_edge *) STBTT_malloc(sizeof(*z), userdata); // @TODO: make a pool of these!!!
-   float dxdy = (e->x1 - e->x0) / (e->y1 - e->y0);
-   STBTT_assert(e->y0 <= start_point);
-   if (!z) return z;
-   // round dx down to avoid going too far
-   if (dxdy < 0)
-      z->dx = -STBTT_ifloor(FIX * -dxdy);
-   else
-      z->dx = STBTT_ifloor(FIX * dxdy);
-   z->x = STBTT_ifloor(FIX * (e->x0 + dxdy * (start_point - e->y0)));
-   z->x -= off_x * FIX;
-   z->ey = e->y1;
-   z->next = 0;
-   z->valid = e->invert ? 1 : -1;
-   return z;
-}
-
 // note: this routine clips fills that extend off the edges... ideally this
 // wouldn't happen, but it could happen if the truetype glyph bounding boxes
 // are wrong, or if the user supplies a too-small bitmap
-static void stbtt__fill_active_edges(unsigned char *scanline, int len, stbtt__active_edge *e, int max_weight)
+static void stbtt__fill_active_edges(unsigned char *scanline, int len, stbtt_active_edge *e, int max_weight)
 {
    // non-zero winding fill
    int x0=0, w=0;
@@ -1611,9 +1622,9 @@ static void stbtt__fill_active_edges(unsigned char *scanline, int len, stbtt__ac
    }
 }
 
-static void stbtt__rasterize_sorted_edges(stbtt__bitmap *result, stbtt__edge *e, int n, int vsubsample, int off_x, int off_y, void *userdata)
+static void stbtt__rasterize_sorted_edges(stbtt__bitmap *result, stbtt_edge *e, int n, int vsubsample, int off_x, int off_y, void *userdata)
 {
-   stbtt__active_edge *active = NULL;
+   stbtt_active_edge *active = NULL;
    int y,j=0;
    int max_weight = (255 / vsubsample);  // weight per vertical scanline
    int s; // vertical subsample index
@@ -1632,12 +1643,12 @@ static void stbtt__rasterize_sorted_edges(stbtt__bitmap *result, stbtt__edge *e,
       for (s=0; s < vsubsample; ++s) {
          // find center of pixel for this scanline
          float scan_y = y + 0.5f;
-         stbtt__active_edge **step = &active;
+         stbtt_active_edge **step = &active;
 
          // update all active edges;
          // remove all active edges that terminate before the center of this scanline
          while (*step) {
-            stbtt__active_edge * z = *step;
+            stbtt_active_edge * z = *step;
             if (z->ey <= scan_y) {
                *step = z->next; // delete from list
                STBTT_assert(z->valid);
@@ -1655,8 +1666,8 @@ static void stbtt__rasterize_sorted_edges(stbtt__bitmap *result, stbtt__edge *e,
             step = &active;
             while (*step && (*step)->next) {
                if ((*step)->x > (*step)->next->x) {
-                  stbtt__active_edge *t = *step;
-                  stbtt__active_edge *q = t->next;
+                  stbtt_active_edge *t = *step;
+                  stbtt_active_edge *q = t->next;
 
                   t->next = q->next;
                   q->next = t;
@@ -1671,7 +1682,7 @@ static void stbtt__rasterize_sorted_edges(stbtt__bitmap *result, stbtt__edge *e,
          // insert all edges that start before the center of this scanline -- omit ones that also end on this scanline
          while (e->y0 <= scan_y) {
             if (e->y1 > scan_y) {
-               stbtt__active_edge *z = new_active(e, off_x, scan_y, userdata);
+               stbtt_active_edge *z = new_active(e, off_x, scan_y, userdata);
                // find insertion point
                if (active == NULL)
                   active = z;
@@ -1681,7 +1692,7 @@ static void stbtt__rasterize_sorted_edges(stbtt__bitmap *result, stbtt__edge *e,
                   active = z;
                } else {
                   // find thing to insert AFTER
-                  stbtt__active_edge *p = active;
+                  stbtt_active_edge *p = active;
                   while (p->next && p->next->x < z->x)
                      p = p->next;
                   // at this point, p->next->x is NOT < z->x
@@ -1703,7 +1714,7 @@ static void stbtt__rasterize_sorted_edges(stbtt__bitmap *result, stbtt__edge *e,
    }
 
    while (active) {
-      stbtt__active_edge *z = active;
+      stbtt_active_edge *z = active;
       active = active->next;
       STBTT_free(z, userdata);
    }
@@ -1714,23 +1725,25 @@ static void stbtt__rasterize_sorted_edges(stbtt__bitmap *result, stbtt__edge *e,
 
 static int stbtt__edge_compare(const void *p, const void *q)
 {
-   stbtt__edge *a = (stbtt__edge *) p;
-   stbtt__edge *b = (stbtt__edge *) q;
+   stbtt_edge *a = (stbtt_edge *) p;
+   stbtt_edge *b = (stbtt_edge *) q;
 
    if (a->y0 < b->y0) return -1;
    if (a->y0 > b->y0) return  1;
    return 0;
 }
 
-typedef struct
-{
-   float x,y;
-} stbtt__point;
+""".}
 
-static void stbtt__rasterize(stbtt__bitmap *result, stbtt__point *pts, int *wcount, int windings, float scale_x, float scale_y, float shift_x, float shift_y, int off_x, int off_y, int invert, void *userdata)
+type stbtt_point {.exportc.} = object
+    x, y: cfloat
+
+{.emit: """
+
+static void stbtt__rasterize(stbtt__bitmap *result, stbtt_point *pts, int *wcount, int windings, float scale_x, float scale_y, float shift_x, float shift_y, int off_x, int off_y, int invert, void *userdata)
 {
    float y_scale_inv = invert ? -scale_y : scale_y;
-   stbtt__edge *e;
+   stbtt_edge *e;
    int n,i,j,k,m;
    int vsubsample = result->h < 8 ? 15 : 5;
    // vsubsample should divide 255 evenly; otherwise we won't reach full opacity
@@ -1740,13 +1753,13 @@ static void stbtt__rasterize(stbtt__bitmap *result, stbtt__point *pts, int *wcou
    for (i=0; i < windings; ++i)
       n += wcount[i];
 
-   e = (stbtt__edge *) STBTT_malloc(sizeof(*e) * (n+1), userdata); // add an extra one as a sentinel
+   e = (stbtt_edge *) STBTT_malloc(sizeof(*e) * (n+1), userdata); // add an extra one as a sentinel
    if (e == 0) return;
    n = 0;
 
    m=0;
    for (i=0; i < windings; ++i) {
-      stbtt__point *p = pts + m;
+      stbtt_point *p = pts + m;
       m += wcount[i];
       j = wcount[i]-1;
       for (k=0; k < wcount[i]; j=k++) {
@@ -1777,109 +1790,106 @@ static void stbtt__rasterize(stbtt__bitmap *result, stbtt__point *pts, int *wcou
    STBTT_free(e, userdata);
 }
 
-static void stbtt__add_point(stbtt__point *points, int n, float x, float y)
-{
-   if (!points) return; // during first pass, it's unallocated
-   points[n].x = x;
-   points[n].y = y;
-}
+""".}
 
-// tesselate until threshhold p is happy... @TODO warped to compensate for non-linear stretching
-static int stbtt__tesselate_curve(stbtt__point *points, int *num_points, float x0, float y0, float x1, float y1, float x2, float y2, float objspace_flatness_squared, int n)
-{
-   // midpoint
-   float mx = (x0 + 2*x1 + x2)/4;
-   float my = (y0 + 2*y1 + y2)/4;
-   // versus directly drawn line
-   float dx = (x0+x2)/2 - mx;
-   float dy = (y0+y2)/2 - my;
-   if (n > 16) // 65536 segments on one curve better be enough!
-      return 1;
-   if (dx*dx+dy*dy > objspace_flatness_squared) { // half-pixel error allowed... need to be smaller if AA
-      stbtt__tesselate_curve(points, num_points, x0,y0, (x0+x1)/2.0f,(y0+y1)/2.0f, mx,my, objspace_flatness_squared,n+1);
-      stbtt__tesselate_curve(points, num_points, mx,my, (x1+x2)/2.0f,(y1+y2)/2.0f, x2,y2, objspace_flatness_squared,n+1);
-   } else {
-      stbtt__add_point(points, *num_points,x2,y2);
-      *num_points = *num_points+1;
-   }
-   return 1;
-}
 
-// returns number of contours
-stbtt__point *stbtt_FlattenCurves(stbtt_vertex *vertices, int num_verts, float objspace_flatness, int **contour_lengths, int *num_contours, void *userdata)
-{
-   stbtt__point *points=0;
-   int num_points=0;
+proc stbtt_add_point(points: var openarray[stbtt_point], n: int, x, y: float) =
+    if n < points.len: # during first pass, it's unallocated
+        points[n].x = x
+        points[n].y = y
 
-   float objspace_flatness_squared = objspace_flatness * objspace_flatness;
-   int i,n=0,start=0, pass;
+# tesselate until threshhold p is happy... @TODO warped to compensate for non-linear stretching
+proc stbtt_tesselate_curve(points: var openarray[stbtt_point], num_points: var cint, x0, y0, x1, y1, x2, y2, objspace_flatness_squared : float, n: int) =
+   # midpoint
+   let mx = (x0 + 2*x1 + x2)/4
+   let my = (y0 + 2*y1 + y2)/4
+   # versus directly drawn line
+   let dx = (x0+x2)/2 - mx
+   let dy = (y0+y2)/2 - my
+   if n > 16: # 65536 segments on one curve better be enough!
+      return
+   if dx*dx+dy*dy > objspace_flatness_squared: # half-pixel error allowed... need to be smaller if AA
+      stbtt_tesselate_curve(points, num_points, x0,y0, (x0+x1)/2.0, (y0+y1)/2.0, mx,my, objspace_flatness_squared, n+1)
+      stbtt_tesselate_curve(points, num_points, mx,my, (x1+x2)/2.0, (y1+y2)/2.0, x2,y2, objspace_flatness_squared, n+1)
+   else:
+      stbtt_add_point(points, num_points, x2, y2)
+      num_points += 1
 
-   // count how many "moves" there are to get the contour count
-   for (i=0; i < num_verts; ++i)
-      if (vertices[i].type == STBTT_vmove)
-         ++n;
+proc toCArray[T](s: seq[T]): ptr T =
+    result = cast[ptr T](malloc(s.len * sizeof(T)))
+    var p = cast[ptr array[999999, T]](result)
+    for i, v in s:
+        p[i] = v
 
-   *num_contours = n;
-   if (n == 0) return 0;
+# returns number of contours
+proc stbtt_FlattenCurves(vertices: openarray[stbtt_vertex], objspace_flatness: cfloat, contour_lengths: var ptr cint, num_contours: var cint, userdata: pointer): ptr[stbtt_point] {.exportc.} =
+    var num_points : cint = 0
 
-   *contour_lengths = (int *) STBTT_malloc(sizeof(**contour_lengths) * n, userdata);
+    let objspace_flatness_squared = objspace_flatness * objspace_flatness
+    var i, n, start: cint
 
-   if (*contour_lengths == 0) {
-      *num_contours = 0;
-      return 0;
-   }
+    # count how many "moves" there are to get the contour count
+    for v in vertices:
+        if v.`type` == STBTT_vmove:
+            n += 1
 
-   // make two passes through the points so we don't need to realloc
-   for (pass=0; pass < 2; ++pass) {
-      float x=0,y=0;
-      if (pass == 1) {
-         points = (stbtt__point *) STBTT_malloc(num_points * sizeof(points[0]), userdata);
-         if (points == NULL) goto error;
-      }
-      num_points = 0;
-      n= -1;
-      for (i=0; i < num_verts; ++i) {
-         switch (vertices[i].type) {
-            case STBTT_vmove:
-               // start the next contour
-               if (n >= 0)
-                  (*contour_lengths)[n] = num_points - start;
-               ++n;
-               start = num_points;
+    num_contours = n
+    if n == 0: return
+    contour_lengths = cast[ptr cint](malloc(num_contours * sizeof(cint)))
 
-               x = vertices[i].x, y = vertices[i].y;
-               stbtt__add_point(points, num_points++, x,y);
-               break;
-            case STBTT_vline:
-               x = vertices[i].x, y = vertices[i].y;
-               stbtt__add_point(points, num_points++, x, y);
-               break;
-            case STBTT_vcurve:
-               stbtt__tesselate_curve(points, &num_points, x,y,
-                                        vertices[i].cx, vertices[i].cy,
-                                        vertices[i].x,  vertices[i].y,
-                                        objspace_flatness_squared, 0);
-               x = vertices[i].x, y = vertices[i].y;
-               break;
-         }
-      }
-      (*contour_lengths)[n] = num_points - start;
-   }
+    var contour_lengths_arr = cast[ptr array[99999, cint]](contour_lengths)
 
-   return points;
-error:
-   STBTT_free(points, userdata);
-   STBTT_free(*contour_lengths, userdata);
-   *contour_lengths = 0;
-   *num_contours = 0;
-   return NULL;
-}
+    var windings = newSeq[stbtt_point](0)
+
+    # make two passes through the points so we don't need to realloc
+    for pass in countup(0, 1):
+        var x, y: float
+        if pass == 1:
+            windings.newSeq(num_points)
+
+        num_points = 0
+        n = -1
+        for v in vertices:
+            case v.`type`:
+                of STBTT_vmove:
+                    # start the next contour
+                    if n >= 0:
+                        contour_lengths_arr[n] = num_points - start
+                    n += 1
+                    start = num_points
+
+                    x = v.x.float
+                    y = v.y.float
+                    stbtt_add_point(windings, num_points, x, y)
+                    num_points += 1
+
+                of STBTT_vline:
+                    x = v.x.float
+                    y = v.y.float
+                    stbtt_add_point(windings, num_points, x, y)
+                    num_points += 1
+
+                of STBTT_vcurve:
+                    stbtt_tesselate_curve(windings, num_points, x,y,
+                                        v.cx.float, v.cy.float,
+                                        v.x.float,  v.y.float,
+                                        objspace_flatness_squared, 0)
+                    x = v.x.float
+                    y = v.y.float
+                else:
+                    discard
+
+        contour_lengths_arr[n] = num_points - start
+
+    result = windings.toCArray()
+
+{.emit: """
 
 void stbtt_Rasterize(stbtt__bitmap *result, float flatness_in_pixels, stbtt_vertex *vertices, int num_verts, float scale_x, float scale_y, float shift_x, float shift_y, int x_off, int y_off, int invert, void *userdata)
 {
    float scale = scale_x > scale_y ? scale_y : scale_x;
    int winding_count, *winding_lengths;
-   stbtt__point *windings = stbtt_FlattenCurves(vertices, num_verts, flatness_in_pixels / scale, &winding_lengths, &winding_count, userdata);
+   stbtt_point *windings = stbtt_FlattenCurves(vertices, num_verts, flatness_in_pixels / scale, &winding_lengths, &winding_count, userdata);
    if (windings) {
       stbtt__rasterize(result, windings, winding_lengths, winding_count, scale_x, scale_y, shift_x, shift_y, x_off, y_off, invert, userdata);
       STBTT_free(winding_lengths, userdata);
@@ -2297,25 +2307,25 @@ static void stbtt__v_prefilter(unsigned char *pixels, int w, int h, int stride_i
    }
 }
 
-static float stbtt__oversample_shift(int oversample)
-{
-   if (!oversample)
-      return 0.0f;
+""".}
 
-   // The prefilter is a box filter of width "oversample",
-   // which shifts phase by (oversample - 1)/2 pixels in
-   // oversampled space. We want to shift in the opposite
-   // direction to counter this.
-   return (float)-(oversample - 1) / (2.0f * (float)oversample);
-}
+proc stbtt_oversample_shift(oversample: int): float {.exportc.} =
+    if oversample != 0:
+        # The prefilter is a box filter of width "oversample",
+        # which shifts phase by (oversample - 1)/2 pixels in
+        # oversampled space. We want to shift in the opposite
+        # direction to counter this.
+        result = -(oversample - 1).float / (2.0 * oversample.float)
+
+{.emit: """
 
 int stbtt_PackFontRanges(stbtt_pack_context *spc, unsigned char *fontdata, int font_index, stbtt_pack_range *ranges, int num_ranges)
 {
    stbtt_fontinfo info;
    float recip_h = 1.0f / spc->h_oversample;
    float recip_v = 1.0f / spc->v_oversample;
-   float sub_x = stbtt__oversample_shift(spc->h_oversample);
-   float sub_y = stbtt__oversample_shift(spc->v_oversample);
+   float sub_x = stbtt_oversample_shift(spc->h_oversample);
+   float sub_y = stbtt_oversample_shift(spc->v_oversample);
    int i,j,k,n, return_value = 1;
    stbrp_context *context = (stbrp_context *) spc->pack_info;
    stbrp_rect    *rects;
