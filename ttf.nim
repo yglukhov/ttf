@@ -458,8 +458,7 @@ type stbtt_aligned_quad* {.exportc.} = object
     x1*, y1*, s1*, t1*: cfloat # bottom-right
 
 
-proc stbtt_GetBakedQuad*(chardata: openarray[stbtt_bakedchar], pw, ph: int,  # same data as above
-                               char_index: cint,           # character to display
+proc stbtt_GetBakedQuad*(bakedChar: stbtt_bakedchar, pw, ph: int,  # same data as above
                                xpos, ypos: var cfloat,     # pointers to current position in screen pixel space
                                q: var stbtt_aligned_quad,  # output: quad to draw
                                opengl_fillrule: bool       # true if opengl fill rule; false if DX9 or earlier
@@ -2032,8 +2031,7 @@ extern int stbtt_BakeFontBitmap(const unsigned char *data, int offset,  // font 
 
 """.}
 
-proc stbtt_GetBakedQuad*(chardata: openarray[stbtt_bakedchar], pw, ph: int,  # same data as above
-                               char_index: cint,           # character to display
+proc stbtt_GetBakedQuad*(bakedChar: stbtt_bakedchar, pw, ph: int,  # same data as above
                                xpos, ypos: var cfloat,     # pointers to current position in screen pixel space
                                q: var stbtt_aligned_quad,  # output: quad to draw
                                opengl_fillrule: bool       # true if opengl fill rule; false if DX9 or earlier
@@ -2042,21 +2040,20 @@ proc stbtt_GetBakedQuad*(chardata: openarray[stbtt_bakedchar], pw, ph: int,  # s
         d3d_bias = if opengl_fillrule: 0.0 else: -0.5
         ipw = 1.0 / pw.float
         iph = 1.0 / ph.float
-        b = chardata[char_index]
-        round_x = floor((xpos + b.xoff) + 0.5).int
-        round_y = floor((ypos + b.yoff) + 0.5).int
+        round_x = floor((xpos + bakedChar.xoff) + 0.5).int
+        round_y = floor((ypos + bakedChar.yoff) + 0.5).int
 
     q.x0 = round_x.float + d3d_bias
     q.y0 = round_y.float + d3d_bias
-    q.x1 = round_x.float + b.x1.float - b.x0.float + d3d_bias
-    q.y1 = round_y.float + b.y1.float - b.y0.float + d3d_bias
+    q.x1 = round_x.float + bakedChar.x1.float - bakedChar.x0.float + d3d_bias
+    q.y1 = round_y.float + bakedChar.y1.float - bakedChar.y0.float + d3d_bias
 
-    q.s0 = b.x0.float * ipw
-    q.t0 = b.y0.float * iph
-    q.s1 = b.x1.float * ipw
-    q.t1 = b.y1.float * iph
+    q.s0 = bakedChar.x0.float * ipw
+    q.t0 = bakedChar.y0.float * iph
+    q.s1 = bakedChar.x1.float * ipw
+    q.t1 = bakedChar.y1.float * iph
 
-    xpos += b.xadvance
+    xpos += bakedChar.xadvance
 
 type stbrp_coord = cint
 
