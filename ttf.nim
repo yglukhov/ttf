@@ -578,7 +578,7 @@ struct stbtt_pack_context {
 # FONT LOADING
 #
 #
-type font_type {.unchecked.} = array[0, uint8]
+type font_type {.unchecked.} = array[999999999, uint8]
 
 proc stbtt_GetFontOffsetForIndex(font_collection: font_type, index: cint): cint {.exportc.}
 
@@ -907,6 +907,8 @@ typedef int stbtt__test_oversample_pow2[(STBTT_MAX_OVERSAMPLE & (STBTT_MAX_OVERS
 """.}
 
 
+{.push overflowChecks: off.}
+
 proc ttBYTE(p: font_type): uint8 {.exportc.} = p[0]
 proc ttCHAR(p: font_type): int8 {.exportc.} = cast[int8](p[0])
 
@@ -918,6 +920,8 @@ proc ttULONG(p: font_type): uint32 {.exportc.} = (p[0].uint32 shl 24) + (p[1].ui
 proc ttULONG(p: openarray[uint8], idx: int): uint32 = (p[idx].uint32 shl 24) + (p[idx + 1].uint32 shl 16) + (p[idx + 2].uint32 shl 8) + p[idx + 3].uint32
 
 proc ttLONG(p: openarray[uint8], idx: int): int32 = (p[idx].int32 shl 24) + (p[idx + 1].int32 shl 16) + (p[idx + 2].int32 shl 8) + p[idx + 3].int32
+
+{.pop.}
 
 
 proc stbtt_tag4(p: openarray[uint8], idx: int, c0, c1, c2, c3: char): bool =
