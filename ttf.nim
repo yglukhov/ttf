@@ -589,22 +589,20 @@ proc stbtt_GetFontOffsetForIndex(font_collection: font_type, index: cint): cint 
 # return '0' for index 0, and -1 for all other indices. You can just skip
 # this step if you know it's that kind of font.
 
+# The following structure is defined publically so you can declare one on
+# the stack or as a global or etc, but you should treat it as opaque.
+type stbtt_fontinfo* {.exportc, byRef.} = object
+    userdata: pointer
+    data: ptr font_type     # pointer to .ttf file
+    fontstart: cint    # offset of start of font
+
+    numGlyphs: cint    # number of glyphs, needed for range checking
+
+    loca,head,glyf,hhea,hmtx,kern: cint # table locations as offset from start of .ttf
+    index_map: cint                     # a cmap mapping for our chosen character encoding
+    indexToLocFormat: cint              # format needed to map from glyph index to glyph
+
 {.emit: """
-
-// The following structure is defined publically so you can declare one on
-// the stack or as a global or etc, but you should treat it as opaque.
-typedef struct stbtt_fontinfo
-{
-   void           * userdata;
-   unsigned char  * data;              // pointer to .ttf file
-   int              fontstart;         // offset of start of font
-
-   int numGlyphs;                     // number of glyphs, needed for range checking
-
-   int loca,head,glyf,hhea,hmtx,kern; // table locations as offset from start of .ttf
-   int index_map;                     // a cmap mapping for our chosen character encoding
-   int indexToLocFormat;              // format needed to map from glyph index to glyph
-} stbtt_fontinfo;
 
 extern int stbtt_InitFont(stbtt_fontinfo *info, const unsigned char *data, int offset);
 // Given an offset into the file that defines a font, this function builds
@@ -667,8 +665,12 @@ extern int stbtt_GetCodepointBox(const stbtt_fontinfo *info, int codepoint, int 
 
 extern void stbtt_GetGlyphHMetrics(const stbtt_fontinfo *info, int glyph_index, int *advanceWidth, int *leftSideBearing);
 extern int  stbtt_GetGlyphKernAdvance(const stbtt_fontinfo *info, int glyph1, int glyph2);
-extern int  stbtt_GetGlyphBox(const stbtt_fontinfo *info, int glyph_index, int *x0, int *y0, int *x1, int *y1);
-// as above, but takes one or more glyph indices for greater efficiency
+""".}
+
+proc stbtt_GetGlyphBox*(info: stbtt_fontinfo, glyph_index: cint, x0, y0, x1, y1: ptr cint): cint {.exportc.}
+# as above, but takes one or more glyph indices for greater efficiency
+
+{.emit: """
 
 
 //////////////////////////////////////////////////////////////////////////////
@@ -700,10 +702,9 @@ type stbtt_vertex {.exportc.} = object
     `type`: STBTT_type
     padding: uint8
 
+
 {.emit: """
 
-extern int stbtt_IsGlyphEmpty(const stbtt_fontinfo *info, int glyph_index);
-// returns non-zero if nothing is drawn for this glyph
 
 extern int stbtt_GetCodepointShape(const stbtt_fontinfo *info, int unicode_codepoint, stbtt_vertex **vertices);
 extern int stbtt_GetGlyphShape(const stbtt_fontinfo *info, int glyph_index, stbtt_vertex **vertices);
@@ -913,13 +914,14 @@ proc ttBYTE(p: font_type): uint8 {.exportc.} = p[0]
 proc ttCHAR(p: font_type): int8 {.exportc.} = cast[int8](p[0])
 
 proc ttUSHORT(p: font_type): uint16 {.exportc.} = (p[0].uint16 * 256) + p[1].uint16
-proc ttUSHORT(p: openarray[uint8], idx: int): uint16 = (p[idx].uint16 * 256) + p[idx + 1].uint16
+proc ttUSHORT(p: font_type, idx: int): uint16 = (p[idx].uint16 * 256) + p[idx + 1].uint16
 proc ttSHORT(p: font_type): int16 {.exportc.} = (p[0].int16 * 256) + p[1].int16
+proc ttSHORT(p: font_type, idx: int): int16 = (p[idx].int16 * 256) + p[idx + 1].int16
 
 proc ttULONG(p: font_type): uint32 {.exportc.} = (p[0].uint32 shl 24) + (p[1].uint32 shl 16) + (p[2].uint32 shl 8) + p[3].uint32
-proc ttULONG(p: openarray[uint8], idx: int): uint32 = (p[idx].uint32 shl 24) + (p[idx + 1].uint32 shl 16) + (p[idx + 2].uint32 shl 8) + p[idx + 3].uint32
+proc ttULONG(p: font_type, idx: int): uint32 = (p[idx].uint32 shl 24) + (p[idx + 1].uint32 shl 16) + (p[idx + 2].uint32 shl 8) + p[idx + 3].uint32
 
-proc ttLONG(p: openarray[uint8], idx: int): int32 = (p[idx].int32 shl 24) + (p[idx + 1].int32 shl 16) + (p[idx + 2].int32 shl 8) + p[idx + 3].int32
+proc ttLONG(p: font_type, idx: int): int32 = (p[idx].int32 shl 24) + (p[idx + 1].int32 shl 16) + (p[idx + 2].int32 shl 8) + p[idx + 3].int32
 
 {.pop.}
 
@@ -1123,50 +1125,42 @@ proc stbtt_setvertex(v: var stbtt_vertex, t: STBTT_type, x, y, cx, cy: int32) {.
     v.cx = cx.int16
     v.cy = cy.int16
 
+proc stbtt_GetGlyfOffset(info: stbtt_fontinfo, glyph_index: cint): cint {.exportc.} =
+    if glyph_index >= info.numGlyphs: return -1 # glyph index out of range
+    if info.indexToLocFormat >= 2:    return -1 # unknown index->glyph map format
+
+    var g1, g2: cint
+    if info.indexToLocFormat == 0:
+        g1 = info.glyf + ttUSHORT(info.data[], info.loca + glyph_index * 2).cint * 2
+        g2 = info.glyf + ttUSHORT(info.data[], info.loca + glyph_index * 2 + 2).cint * 2
+    else:
+        g1 = info.glyf + ttULONG(info.data[], info.loca + glyph_index * 4).cint
+        g2 = info.glyf + ttULONG(info.data[], info.loca + glyph_index * 4 + 4).cint
+
+    result = if g1==g2: -1 else: g1 # if length is 0, return -1
+
+proc stbtt_GetGlyphBox*(info: stbtt_fontinfo, glyph_index: cint, x0, y0, x1, y1: ptr cint): cint =
+    let g = stbtt_GetGlyfOffset(info, glyph_index)
+    if g < 0: return 0
+
+    if x0 != nil: x0[] = ttSHORT(info.data[], g + 2)
+    if y0 != nil: y0[] = ttSHORT(info.data[], g + 4)
+    if x1 != nil: x1[] = ttSHORT(info.data[], g + 6)
+    if y1 != nil: y1[] = ttSHORT(info.data[], g + 8)
+    return 1
+
+proc stbtt_IsGlyphEmpty*(info: stbtt_fontinfo, glyph_index: cint): bool =
+    # returns non-zero if nothing is drawn for this glyph
+    let g = stbtt_GetGlyfOffset(info, glyph_index)
+    if g < 0: return true
+    let numberOfContours = ttSHORT(info.data[], g)
+    return numberOfContours == 0
+
 {.emit: """
-
-static int stbtt__GetGlyfOffset(const stbtt_fontinfo *info, int glyph_index)
-{
-   int g1,g2;
-
-   if (glyph_index >= info->numGlyphs) return -1; // glyph index out of range
-   if (info->indexToLocFormat >= 2)    return -1; // unknown index->glyph map format
-
-   if (info->indexToLocFormat == 0) {
-      g1 = info->glyf + ttUSHORT(info->data + info->loca + glyph_index * 2) * 2;
-      g2 = info->glyf + ttUSHORT(info->data + info->loca + glyph_index * 2 + 2) * 2;
-   } else {
-      g1 = info->glyf + ttULONG (info->data + info->loca + glyph_index * 4);
-      g2 = info->glyf + ttULONG (info->data + info->loca + glyph_index * 4 + 4);
-   }
-
-   return g1==g2 ? -1 : g1; // if length is 0, return -1
-}
-
-int stbtt_GetGlyphBox(const stbtt_fontinfo *info, int glyph_index, int *x0, int *y0, int *x1, int *y1)
-{
-   int g = stbtt__GetGlyfOffset(info, glyph_index);
-   if (g < 0) return 0;
-
-   if (x0) *x0 = ttSHORT(info->data + g + 2);
-   if (y0) *y0 = ttSHORT(info->data + g + 4);
-   if (x1) *x1 = ttSHORT(info->data + g + 6);
-   if (y1) *y1 = ttSHORT(info->data + g + 8);
-   return 1;
-}
 
 int stbtt_GetCodepointBox(const stbtt_fontinfo *info, int codepoint, int *x0, int *y0, int *x1, int *y1)
 {
    return stbtt_GetGlyphBox(info, stbtt_FindGlyphIndex(info,codepoint), x0,y0,x1,y1);
-}
-
-int stbtt_IsGlyphEmpty(const stbtt_fontinfo *info, int glyph_index)
-{
-   stbtt_int16 numberOfContours;
-   int g = stbtt__GetGlyfOffset(info, glyph_index);
-   if (g < 0) return 1;
-   numberOfContours = ttSHORT(info->data + g);
-   return numberOfContours == 0;
 }
 
 static int stbtt__close_shape(stbtt_vertex *vertices, int num_vertices, int was_off, int start_off,
@@ -1192,7 +1186,7 @@ int stbtt_GetGlyphShape(const stbtt_fontinfo *info, int glyph_index, stbtt_verte
    stbtt_uint8 *data = info->data;
    stbtt_vertex *vertices=0;
    int num_vertices=0;
-   int g = stbtt__GetGlyfOffset(info, glyph_index);
+   int g = stbtt_GetGlyfOffset(info, glyph_index);
 
    *pvertices = NULL;
 
