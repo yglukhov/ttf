@@ -602,15 +602,15 @@ type stbtt_fontinfo* {.exportc, byRef.} = object
     index_map: cint                     # a cmap mapping for our chosen character encoding
     indexToLocFormat: cint              # format needed to map from glyph index to glyph
 
+
+proc stbtt_InitFont*(info: var stbtt_fontinfo, data2: font_type, fontstart: cint): cint {.exportc.}
+# Given an offset into the file that defines a font, this function builds
+# the necessary cached info for the rest of the system. You must allocate
+# the stbtt_fontinfo yourself, and stbtt_InitFont will fill it out. You don't
+# need to do anything special to free it, because the contents are pure
+# value data with no additional data structures. Returns 0 on failure.
+
 {.emit: """
-
-extern int stbtt_InitFont(stbtt_fontinfo *info, const unsigned char *data, int offset);
-// Given an offset into the file that defines a font, this function builds
-// the necessary cached info for the rest of the system. You must allocate
-// the stbtt_fontinfo yourself, and stbtt_InitFont will fill it out. You don't
-// need to do anything special to free it, because the contents are pure
-// value data with no additional data structures. Returns 0 on failure.
-
 
 //////////////////////////////////////////////////////////////////////////////
 //
@@ -827,35 +827,42 @@ extern const char *stbtt_GetFontNameString(const stbtt_fontinfo *font, int *leng
 //     http://developer.apple.com/textfonts/TTRefMan/RM06/Chap6name.html
 //     http://www.microsoft.com/typography/otspec/name.htm
 
-enum { // platformID
-   STBTT_PLATFORM_ID_UNICODE   =0,
-   STBTT_PLATFORM_ID_MAC       =1,
-   STBTT_PLATFORM_ID_ISO       =2,
-   STBTT_PLATFORM_ID_MICROSOFT =3
-};
+""".}
 
-enum { // encodingID for STBTT_PLATFORM_ID_UNICODE
-   STBTT_UNICODE_EID_UNICODE_1_0    =0,
-   STBTT_UNICODE_EID_UNICODE_1_1    =1,
-   STBTT_UNICODE_EID_ISO_10646      =2,
-   STBTT_UNICODE_EID_UNICODE_2_0_BMP=3,
-   STBTT_UNICODE_EID_UNICODE_2_0_FULL=4
-};
+type PlatformId = enum
+    STBTT_PLATFORM_ID_UNICODE   = 0
+    STBTT_PLATFORM_ID_MAC       = 1
+    STBTT_PLATFORM_ID_ISO       = 2
+    STBTT_PLATFORM_ID_MICROSOFT = 3
 
-enum { // encodingID for STBTT_PLATFORM_ID_MICROSOFT
-   STBTT_MS_EID_SYMBOL        =0,
-   STBTT_MS_EID_UNICODE_BMP   =1,
-   STBTT_MS_EID_SHIFTJIS      =2,
-   STBTT_MS_EID_UNICODE_FULL  =10
-};
+const # Encoding ID
+    # for STBTT_PLATFORM_ID_UNICODE
+    STBTT_UNICODE_EID_UNICODE_1_0    = 0
+    STBTT_UNICODE_EID_UNICODE_1_1    = 1
+    STBTT_UNICODE_EID_ISO_10646      = 2
+    STBTT_UNICODE_EID_UNICODE_2_0_BMP= 3
+    STBTT_UNICODE_EID_UNICODE_2_0_FULL= 4
 
-enum { // encodingID for STBTT_PLATFORM_ID_MAC; same as Script Manager codes
-   STBTT_MAC_EID_ROMAN        =0,   STBTT_MAC_EID_ARABIC       =4,
-   STBTT_MAC_EID_JAPANESE     =1,   STBTT_MAC_EID_HEBREW       =5,
-   STBTT_MAC_EID_CHINESE_TRAD =2,   STBTT_MAC_EID_GREEK        =6,
-   STBTT_MAC_EID_KOREAN       =3,   STBTT_MAC_EID_RUSSIAN      =7
-};
+    # for STBTT_PLATFORM_ID_MICROSOFT
+    STBTT_MS_EID_SYMBOL        = 0
+    STBTT_MS_EID_UNICODE_BMP   = 1
+    STBTT_MS_EID_SHIFTJIS      = 2
+    STBTT_MS_EID_UNICODE_FULL  = 10
 
+    # for STBTT_PLATFORM_ID_MAC; same as Script Manager codes
+    STBTT_MAC_EID_ROMAN        = 0
+    STBTT_MAC_EID_JAPANESE     = 1
+    STBTT_MAC_EID_CHINESE_TRAD = 2
+    STBTT_MAC_EID_KOREAN       = 3
+    STBTT_MAC_EID_ARABIC       = 4
+    STBTT_MAC_EID_HEBREW       = 5
+    STBTT_MAC_EID_GREEK        = 6
+    STBTT_MAC_EID_RUSSIAN      = 7
+
+
+
+
+{.emit: """
 enum { // languageID for STBTT_PLATFORM_ID_MICROSOFT; same as LCID...
        // problematic because there are e.g. 16 english LCIDs and 16 arabic LCIDs
    STBTT_MS_LANG_ENGLISH     =0x0409,   STBTT_MS_LANG_ITALIAN     =0x0410,
@@ -960,65 +967,57 @@ proc stbtt_GetFontOffsetForIndex(font_collection: font_type, index: cint): cint 
             return ttULONG(font_collection, 12 + index * 14).cint
     return -1
 
+
+proc stbtt_InitFont*(info: var stbtt_fontinfo, data2: font_type, fontstart: cint): cint =
+    info.fontstart = fontstart
+    let cmap = stbtt_find_table(data2, fontstart.uint32, "cmap")       # required
+    info.loca = stbtt_find_table(data2, fontstart.uint32, "loca").cint # required
+    info.head = stbtt_find_table(data2, fontstart.uint32, "head").cint # required
+    info.glyf = stbtt_find_table(data2, fontstart.uint32, "glyf").cint # required
+    info.hhea = stbtt_find_table(data2, fontstart.uint32, "hhea").cint # required
+    info.hmtx = stbtt_find_table(data2, fontstart.uint32, "hmtx").cint # required
+    info.kern = stbtt_find_table(data2, fontstart.uint32, "kern").cint # not required
+
+    {.emit: "`info`->data = data2;".}
+
+    if cmap == 0 or info.loca == 0 or info.head == 0 or info.glyf == 0 or info.hhea == 0 or info.hmtx == 0:
+      return 0
+
+    let t = stbtt_find_table(data2, fontstart.uint32, "maxp")
+    if t == 0:
+        info.numGlyphs = 0xffff
+    else:
+        info.numGlyphs = ttUSHORT(data2, t.int + 4).cint
+
+    # find a cmap encoding table we understand *now* to avoid searching
+    # later. (todo: could make this installable)
+    # the same regardless of glyph.
+
+    let numTables = ttUSHORT(data2, cmap.int + 2).int
+    info.index_map = 0
+
+    for i in 0 .. < numTables:
+        let encoding_record = cmap.int + 4 + 8 * i
+        # find an encoding we understand:
+        case ttUSHORT(data2, encoding_record).PlatformId:
+            of STBTT_PLATFORM_ID_MICROSOFT:
+                case ttUSHORT(data2, encoding_record + 2):
+                    of STBTT_MS_EID_UNICODE_BMP, STBTT_MS_EID_UNICODE_FULL:
+                        # MS/Unicode
+                        info.index_map = cmap.cint + ttULONG(data2, encoding_record + 4).cint
+                    else: discard
+            of STBTT_PLATFORM_ID_UNICODE:
+                # Mac/iOS has these
+                # all the encodingIDs are unicode, so we don't bother to check it
+                info.index_map = cmap.cint + ttULONG(data2, encoding_record + 4).cint
+            else: discard
+    if info.index_map == 0:
+        return 0
+
+    info.indexToLocFormat = ttUSHORT(data2, info.head + 50).cint
+    return 1
+
 {.emit: """
-
-int stbtt_InitFont(stbtt_fontinfo *info, const unsigned char *data2, int fontstart)
-{
-   stbtt_uint8 *data = (stbtt_uint8 *) data2;
-   stbtt_uint32 cmap, t;
-   stbtt_int32 i,numTables;
-
-   info->data = data;
-   info->fontstart = fontstart;
-
-   cmap = stbtt_find_table(data, fontstart, "cmap");       // required
-   info->loca = stbtt_find_table(data, fontstart, "loca"); // required
-   info->head = stbtt_find_table(data, fontstart, "head"); // required
-   info->glyf = stbtt_find_table(data, fontstart, "glyf"); // required
-   info->hhea = stbtt_find_table(data, fontstart, "hhea"); // required
-   info->hmtx = stbtt_find_table(data, fontstart, "hmtx"); // required
-   info->kern = stbtt_find_table(data, fontstart, "kern"); // not required
-   if (!cmap || !info->loca || !info->head || !info->glyf || !info->hhea || !info->hmtx)
-      return 0;
-
-   t = stbtt_find_table(data, fontstart, "maxp");
-   if (t)
-      info->numGlyphs = ttUSHORT(data+t+4);
-   else
-      info->numGlyphs = 0xffff;
-
-   // find a cmap encoding table we understand *now* to avoid searching
-   // later. (todo: could make this installable)
-   // the same regardless of glyph.
-   numTables = ttUSHORT(data + cmap + 2);
-   info->index_map = 0;
-   for (i=0; i < numTables; ++i) {
-      stbtt_uint32 encoding_record = cmap + 4 + 8 * i;
-      // find an encoding we understand:
-      switch(ttUSHORT(data+encoding_record)) {
-         case STBTT_PLATFORM_ID_MICROSOFT:
-            switch (ttUSHORT(data+encoding_record+2)) {
-               case STBTT_MS_EID_UNICODE_BMP:
-               case STBTT_MS_EID_UNICODE_FULL:
-                  // MS/Unicode
-                  info->index_map = cmap + ttULONG(data+encoding_record+4);
-                  break;
-            }
-            break;
-        case STBTT_PLATFORM_ID_UNICODE:
-            // Mac/iOS has these
-            // all the encodingIDs are unicode, so we don't bother to check it
-            info->index_map = cmap + ttULONG(data+encoding_record+4);
-            break;
-      }
-   }
-   if (info->index_map == 0)
-      return 0;
-
-   info->indexToLocFormat = ttUSHORT(data+info->head + 50);
-   return 1;
-}
-
 int stbtt_FindGlyphIndex(const stbtt_fontinfo *info, int unicode_codepoint)
 {
    stbtt_uint8 *data = info->data;
