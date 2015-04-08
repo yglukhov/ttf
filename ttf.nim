@@ -622,19 +622,22 @@ int stbtt_FindGlyphIndex(const stbtt_fontinfo *info, int unicode_codepoint);
 // going to process, then use glyph-based functions instead of the
 // codepoint-based functions.
 
+""".}
 
-//////////////////////////////////////////////////////////////////////////////
-//
-// CHARACTER PROPERTIES
-//
+##////////////////////////////////////////////////////////////////////////////
+#
+# CHARACTER PROPERTIES
+#
 
-extern float stbtt_ScaleForPixelHeight(const stbtt_fontinfo *info, float pixels);
-// computes a scale factor to produce a font whose "height" is 'pixels' tall.
-// Height is measured as the distance from the highest ascender to the lowest
-// descender; in other words, it's equivalent to calling stbtt_GetFontVMetrics
-// and computing:
-//       scale = pixels / (ascent - descent)
-// so if you prefer to measure height by the ascent only, use a similar calculation.
+proc stbtt_ScaleForPixelHeight*(info: var stbtt_fontinfo, height: cfloat): cfloat {.exportc.}
+# computes a scale factor to produce a font whose "height" is 'pixels' tall.
+# Height is measured as the distance from the highest ascender to the lowest
+# descender; in other words, it's equivalent to calling stbtt_GetFontVMetrics
+# and computing:
+#       scale = pixels / (ascent - descent)
+# so if you prefer to measure height by the ascent only, use a similar calculation.
+
+{.emit: """
 
 extern float stbtt_ScaleForMappingEmToPixels(const stbtt_fontinfo *info, float pixels);
 // computes a scale factor to produce a font whose EM size is mapped to
@@ -648,9 +651,6 @@ extern void stbtt_GetFontVMetrics(const stbtt_fontinfo *info, int *ascent, int *
 // so you should advance the vertical position by "*ascent - *descent + *lineGap"
 //   these are expressed in unscaled coordinates, so you must multiply by
 //   the scale factor for a given size
-
-extern void stbtt_GetFontBoundingBox(const stbtt_fontinfo *info, int *x0, int *y0, int *x1, int *y1);
-// the bounding box around all possible characters
 
 extern void stbtt_GetCodepointHMetrics(const stbtt_fontinfo *info, int codepoint, int *advanceWidth, int *leftSideBearing);
 // leftSideBearing is the offset from the current horizontal position to the left edge of the character
@@ -1466,19 +1466,20 @@ void stbtt_GetFontVMetrics(const stbtt_fontinfo *info, int *ascent, int *descent
    if (lineGap) *lineGap = ttSHORT(info->data+info->hhea + 8);
 }
 
-void stbtt_GetFontBoundingBox(const stbtt_fontinfo *info, int *x0, int *y0, int *x1, int *y1)
-{
-   *x0 = ttSHORT(info->data + info->head + 36);
-   *y0 = ttSHORT(info->data + info->head + 38);
-   *x1 = ttSHORT(info->data + info->head + 40);
-   *y1 = ttSHORT(info->data + info->head + 42);
-}
+""".}
 
-float stbtt_ScaleForPixelHeight(const stbtt_fontinfo *info, float height)
-{
-   int fheight = ttSHORT(info->data + info->hhea + 4) - ttSHORT(info->data + info->hhea + 6);
-   return (float) height / fheight;
-}
+proc stbtt_GetFontBoundingBox*(info: stbtt_fontinfo, x0, y0, x1, y1: var int) =
+    # the bounding box around all possible characters
+    x0 = ttSHORT(info.data[], info.head + 36)
+    y0 = ttSHORT(info.data[], info.head + 38)
+    x1 = ttSHORT(info.data[], info.head + 40)
+    y1 = ttSHORT(info.data[], info.head + 42)
+
+proc stbtt_ScaleForPixelHeight*(info: var stbtt_fontinfo, height: cfloat): cfloat =
+    let fheight = ttSHORT(info.data[], info.hhea + 4) - ttSHORT(info.data[], info.hhea + 6)
+    result = height / fheight.cfloat
+
+{.emit: """
 
 float stbtt_ScaleForMappingEmToPixels(const stbtt_fontinfo *info, float pixels)
 {
