@@ -437,8 +437,8 @@ extern "C" {
 #
 
 type stbtt_bakedchar* {.exportc.} = object
-    x0, y0, x1, y1: uint16 # coordinates of bbox in bitmap
-    xoff, yoff, xadvance: cfloat
+    x0*, y0*, x1*, y1*: uint16 # coordinates of bbox in bitmap
+    xoff*, yoff*, xadvance*: cfloat
 
 
 proc stbtt_BakeFontBitmap*(data: pointer, offset: cint,        # font location (use offset=0 for plain .ttf)
@@ -462,7 +462,7 @@ proc stbtt_GetBakedQuad*(bakedChar: stbtt_bakedchar, pw, ph: int,  # same data a
                                xpos, ypos: var cfloat,     # pointers to current position in screen pixel space
                                q: var stbtt_aligned_quad,  # output: quad to draw
                                opengl_fillrule: bool       # true if opengl fill rule; false if DX9 or earlier
-                               )
+                               ) {.exportc.}
 
 # Call GetBakedQuad with char_index = 'character - first_char', and it
 # creates the quad you need to draw and advances the current position.
@@ -578,7 +578,7 @@ struct stbtt_pack_context {
 # FONT LOADING
 #
 #
-type font_type {.unchecked.} = array[999999999, uint8]
+type font_type* {.unchecked.} = array[999999999, uint8]
 
 proc stbtt_GetFontOffsetForIndex(font_collection: font_type, index: cint): cint {.exportc.}
 
@@ -603,33 +603,31 @@ type stbtt_fontinfo* {.exportc, byRef.} = object
     indexToLocFormat: cint              # format needed to map from glyph index to glyph
 
 
-proc stbtt_InitFont*(info: var stbtt_fontinfo, data2: font_type, fontstart: cint): cint {.exportc.}
+proc stbtt_InitFont*(info: var stbtt_fontinfo, data: font_type, fontstart: cint): cint {.exportc.}
 # Given an offset into the file that defines a font, this function builds
 # the necessary cached info for the rest of the system. You must allocate
 # the stbtt_fontinfo yourself, and stbtt_InitFont will fill it out. You don't
 # need to do anything special to free it, because the contents are pure
 # value data with no additional data structures. Returns 0 on failure.
 
-{.emit: """
 
-//////////////////////////////////////////////////////////////////////////////
-//
-// CHARACTER TO GLYPH-INDEX CONVERSIOn
+#/////////////////////////////////////////////////////////////////////////////
+#
+# CHARACTER TO GLYPH-INDEX CONVERSIOn
 
-int stbtt_FindGlyphIndex(const stbtt_fontinfo *info, int unicode_codepoint);
-// If you're going to perform multiple operations on the same character
-// and you want a speed-up, call this function with the character you're
-// going to process, then use glyph-based functions instead of the
-// codepoint-based functions.
+proc stbtt_FindGlyphIndex*(info: stbtt_fontinfo, unicode_codepoint: cint): cint {.importc.}
+# If you're going to perform multiple operations on the same character
+# and you want a speed-up, call this function with the character you're
+# going to process, then use glyph-based functions instead of the
+# codepoint-based functions.
 
-""".}
 
 ##////////////////////////////////////////////////////////////////////////////
 #
 # CHARACTER PROPERTIES
 #
 
-proc stbtt_ScaleForPixelHeight*(info: var stbtt_fontinfo, height: cfloat): cfloat {.exportc.}
+#proc stbtt_ScaleForPixelHeight*(info: var stbtt_fontinfo, height: cfloat): cfloat {.exportc.}
 # computes a scale factor to produce a font whose "height" is 'pixels' tall.
 # Height is measured as the distance from the highest ascender to the lowest
 # descender; in other words, it's equivalent to calling stbtt_GetFontVMetrics
@@ -663,10 +661,10 @@ extern int  stbtt_GetCodepointKernAdvance(const stbtt_fontinfo *info, int ch1, i
 extern int stbtt_GetCodepointBox(const stbtt_fontinfo *info, int codepoint, int *x0, int *y0, int *x1, int *y1);
 // Gets the bounding box of the visible part of the glyph, in unscaled coordinates
 
-extern void stbtt_GetGlyphHMetrics(const stbtt_fontinfo *info, int glyph_index, int *advanceWidth, int *leftSideBearing);
 extern int  stbtt_GetGlyphKernAdvance(const stbtt_fontinfo *info, int glyph1, int glyph2);
 """.}
 
+proc stbtt_GetGlyphHMetrics*(info: stbtt_fontinfo, glyph_index: cint, advanceWidth, leftSideBearing: var cint) {.exportc.}
 proc stbtt_GetGlyphBox*(info: stbtt_fontinfo, glyph_index: cint, x0, y0, x1, y1: ptr cint): cint {.exportc.}
 # as above, but takes one or more glyph indices for greater efficiency
 
@@ -767,11 +765,14 @@ extern void stbtt_GetCodepointBitmapBoxSubpixel(const stbtt_fontinfo *font, int 
 // on glyph indices instead of Unicode codepoints (for efficiency)
 extern unsigned char *stbtt_GetGlyphBitmap(const stbtt_fontinfo *info, float scale_x, float scale_y, int glyph, int *width, int *height, int *xoff, int *yoff);
 extern unsigned char *stbtt_GetGlyphBitmapSubpixel(const stbtt_fontinfo *info, float scale_x, float scale_y, float shift_x, float shift_y, int glyph, int *width, int *height, int *xoff, int *yoff);
-extern void stbtt_MakeGlyphBitmap(const stbtt_fontinfo *info, unsigned char *output, int out_w, int out_h, int out_stride, float scale_x, float scale_y, int glyph);
-extern void stbtt_MakeGlyphBitmapSubpixel(const stbtt_fontinfo *info, unsigned char *output, int out_w, int out_h, int out_stride, float scale_x, float scale_y, float shift_x, float shift_y, int glyph);
-extern void stbtt_GetGlyphBitmapBox(const stbtt_fontinfo *font, int glyph, float scale_x, float scale_y, int *ix0, int *iy0, int *ix1, int *iy1);
-extern void stbtt_GetGlyphBitmapBoxSubpixel(const stbtt_fontinfo *font, int glyph, float scale_x, float scale_y,float shift_x, float shift_y, int *ix0, int *iy0, int *ix1, int *iy1);
+""".}
 
+proc stbtt_MakeGlyphBitmap*(info: stbtt_fontinfo, output: ptr byte, out_w, out_h, out_stride: cint, scale_x, scale_y: cfloat, glyph: cint) {.importc.}
+proc stbtt_MakeGlyphBitmapSubpixel*(info: stbtt_fontinfo, output: ptr byte, out_w, out_h, out_stride: cint, scale_x, scale_y, shift_x, shift_y: cfloat, glyph: cint) {.importc.}
+proc stbtt_GetGlyphBitmapBox*(info: stbtt_fontinfo, glyph: cint, scale_x, scale_y: cfloat, ix0, iy0, ix1, iy1: var cint) {.importc.}
+proc stbtt_GetGlyphBitmapBoxSubpixel*(info: stbtt_fontinfo, glyph: cint, scale_x, scale_y, shift_x, shift_y: cfloat, ix0, iy0, ix1, iy1: var cint) {.importc.}
+
+{.emit: """
 
 // @TODO: don't expose this structure
 typedef struct
@@ -829,6 +830,8 @@ extern const char *stbtt_GetFontNameString(const stbtt_fontinfo *font, int *leng
 
 """.}
 
+{.push hints: off.} # Suppress declared but not used warning [XDeclaredButNotUsed]
+
 type PlatformId = enum
     STBTT_PLATFORM_ID_UNICODE   = 0
     STBTT_PLATFORM_ID_MAC       = 1
@@ -859,7 +862,7 @@ const # Encoding ID
     STBTT_MAC_EID_GREEK        = 6
     STBTT_MAC_EID_RUSSIAN      = 7
 
-
+{.pop.}
 
 
 {.emit: """
@@ -968,53 +971,53 @@ proc stbtt_GetFontOffsetForIndex(font_collection: font_type, index: cint): cint 
     return -1
 
 
-proc stbtt_InitFont*(info: var stbtt_fontinfo, data2: font_type, fontstart: cint): cint =
+proc stbtt_InitFont*(info: var stbtt_fontinfo, data: font_type, fontstart: cint): cint =
     info.fontstart = fontstart
-    let cmap = stbtt_find_table(data2, fontstart.uint32, "cmap")       # required
-    info.loca = stbtt_find_table(data2, fontstart.uint32, "loca").cint # required
-    info.head = stbtt_find_table(data2, fontstart.uint32, "head").cint # required
-    info.glyf = stbtt_find_table(data2, fontstart.uint32, "glyf").cint # required
-    info.hhea = stbtt_find_table(data2, fontstart.uint32, "hhea").cint # required
-    info.hmtx = stbtt_find_table(data2, fontstart.uint32, "hmtx").cint # required
-    info.kern = stbtt_find_table(data2, fontstart.uint32, "kern").cint # not required
+    let cmap = stbtt_find_table(data, fontstart.uint32, "cmap")       # required
+    info.loca = stbtt_find_table(data, fontstart.uint32, "loca").cint # required
+    info.head = stbtt_find_table(data, fontstart.uint32, "head").cint # required
+    info.glyf = stbtt_find_table(data, fontstart.uint32, "glyf").cint # required
+    info.hhea = stbtt_find_table(data, fontstart.uint32, "hhea").cint # required
+    info.hmtx = stbtt_find_table(data, fontstart.uint32, "hmtx").cint # required
+    info.kern = stbtt_find_table(data, fontstart.uint32, "kern").cint # not required
 
-    {.emit: "`info`->data = data2;".}
+    {.emit: "`info`->data = data;".}
 
     if cmap == 0 or info.loca == 0 or info.head == 0 or info.glyf == 0 or info.hhea == 0 or info.hmtx == 0:
       return 0
 
-    let t = stbtt_find_table(data2, fontstart.uint32, "maxp")
+    let t = stbtt_find_table(data, fontstart.uint32, "maxp")
     if t == 0:
         info.numGlyphs = 0xffff
     else:
-        info.numGlyphs = ttUSHORT(data2, t.int + 4).cint
+        info.numGlyphs = ttUSHORT(data, t.int + 4).cint
 
     # find a cmap encoding table we understand *now* to avoid searching
     # later. (todo: could make this installable)
     # the same regardless of glyph.
 
-    let numTables = ttUSHORT(data2, cmap.int + 2).int
+    let numTables = ttUSHORT(data, cmap.int + 2).int
     info.index_map = 0
 
     for i in 0 .. < numTables:
         let encoding_record = cmap.int + 4 + 8 * i
         # find an encoding we understand:
-        case ttUSHORT(data2, encoding_record).PlatformId:
+        case ttUSHORT(data, encoding_record).PlatformId:
             of STBTT_PLATFORM_ID_MICROSOFT:
-                case ttUSHORT(data2, encoding_record + 2):
+                case ttUSHORT(data, encoding_record + 2):
                     of STBTT_MS_EID_UNICODE_BMP, STBTT_MS_EID_UNICODE_FULL:
                         # MS/Unicode
-                        info.index_map = cmap.cint + ttULONG(data2, encoding_record + 4).cint
+                        info.index_map = cmap.cint + ttULONG(data, encoding_record + 4).cint
                     else: discard
             of STBTT_PLATFORM_ID_UNICODE:
                 # Mac/iOS has these
                 # all the encodingIDs are unicode, so we don't bother to check it
-                info.index_map = cmap.cint + ttULONG(data2, encoding_record + 4).cint
+                info.index_map = cmap.cint + ttULONG(data, encoding_record + 4).cint
             else: discard
     if info.index_map == 0:
         return 0
 
-    info.indexToLocFormat = ttUSHORT(data2, info.head + 50).cint
+    info.indexToLocFormat = ttUSHORT(data, info.head + 50).cint
     return 1
 
 {.emit: """
@@ -1403,19 +1406,18 @@ int stbtt_GetGlyphShape(const stbtt_fontinfo *info, int glyph_index, stbtt_verte
    *pvertices = vertices;
    return num_vertices;
 }
+""".}
 
-void stbtt_GetGlyphHMetrics(const stbtt_fontinfo *info, int glyph_index, int *advanceWidth, int *leftSideBearing)
-{
-   stbtt_uint16 numOfLongHorMetrics = ttUSHORT(info->data+info->hhea + 34);
-   if (glyph_index < numOfLongHorMetrics) {
-      if (advanceWidth)     *advanceWidth    = ttSHORT(info->data + info->hmtx + 4*glyph_index);
-      if (leftSideBearing)  *leftSideBearing = ttSHORT(info->data + info->hmtx + 4*glyph_index + 2);
-   } else {
-      if (advanceWidth)     *advanceWidth    = ttSHORT(info->data + info->hmtx + 4*(numOfLongHorMetrics-1));
-      if (leftSideBearing)  *leftSideBearing = ttSHORT(info->data + info->hmtx + 4*numOfLongHorMetrics + 2*(glyph_index - numOfLongHorMetrics));
-   }
-}
+proc stbtt_GetGlyphHMetrics(info: stbtt_fontinfo, glyph_index: cint, advanceWidth, leftSideBearing: var cint) =
+    let numOfLongHorMetrics = ttUSHORT(info.data[], info.hhea + 34).int
+    if glyph_index < numOfLongHorMetrics:
+        advanceWidth    = ttSHORT(info.data[], info.hmtx + 4 * glyph_index)
+        leftSideBearing = ttSHORT(info.data[], info.hmtx + 4 * glyph_index + 2)
+    else:
+        advanceWidth    = ttSHORT(info.data[], info.hmtx + 4 * (numOfLongHorMetrics - 1))
+        leftSideBearing = ttSHORT(info.data[], info.hmtx + 4 * numOfLongHorMetrics + 2 * (glyph_index - numOfLongHorMetrics))
 
+{.emit: """
 int  stbtt_GetGlyphKernAdvance(const stbtt_fontinfo *info, int glyph1, int glyph2)
 {
    stbtt_uint8 *data = info->data + info->kern;
@@ -1458,14 +1460,12 @@ void stbtt_GetCodepointHMetrics(const stbtt_fontinfo *info, int codepoint, int *
    stbtt_GetGlyphHMetrics(info, stbtt_FindGlyphIndex(info,codepoint), advanceWidth, leftSideBearing);
 }
 
-void stbtt_GetFontVMetrics(const stbtt_fontinfo *info, int *ascent, int *descent, int *lineGap)
-{
-   if (ascent ) *ascent  = ttSHORT(info->data+info->hhea + 4);
-   if (descent) *descent = ttSHORT(info->data+info->hhea + 6);
-   if (lineGap) *lineGap = ttSHORT(info->data+info->hhea + 8);
-}
-
 """.}
+
+proc stbtt_GetFontVMetrics*(info: stbtt_fontinfo, ascent, descent, lineGap: var cint) =
+    ascent  = ttSHORT(info.data[], info.hhea + 4)
+    descent = ttSHORT(info.data[], info.hhea + 6)
+    lineGap = ttSHORT(info.data[], info.hhea + 8)
 
 proc stbtt_GetFontBoundingBox*(info: stbtt_fontinfo, x0, y0, x1, y1: var int) =
     # the bounding box around all possible characters
@@ -1474,7 +1474,7 @@ proc stbtt_GetFontBoundingBox*(info: stbtt_fontinfo, x0, y0, x1, y1: var int) =
     x1 = ttSHORT(info.data[], info.head + 40)
     y1 = ttSHORT(info.data[], info.head + 42)
 
-proc stbtt_ScaleForPixelHeight*(info: var stbtt_fontinfo, height: cfloat): cfloat =
+proc stbtt_ScaleForPixelHeight*(info: stbtt_fontinfo, height: cfloat): cfloat {.exportc.} =
     let fheight = ttSHORT(info.data[], info.hhea + 4) - ttSHORT(info.data[], info.hhea + 6)
     result = height / fheight.cfloat
 
