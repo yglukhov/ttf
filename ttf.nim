@@ -1021,7 +1021,7 @@ proc stbtt_InitFont*(info: var stbtt_fontinfo, data: font_type, fontstart: cint)
     return 1
 
 {.emit: """
-int stbtt_FindGlyphIndex(const stbtt_fontinfo *info, int unicode_codepoint)
+int N_RAW_NIMCALL stbtt_FindGlyphIndex(const stbtt_fontinfo *info, int unicode_codepoint)
 {
    stbtt_uint8 *data = info->data;
    stbtt_uint32 index_map = info->index_map;
@@ -1514,7 +1514,7 @@ void stbtt_GetGlyphBitmapBoxSubpixel(const stbtt_fontinfo *font, int glyph, floa
    }
 }
 
-void stbtt_GetGlyphBitmapBox(const stbtt_fontinfo *font, int glyph, float scale_x, float scale_y, int *ix0, int *iy0, int *ix1, int *iy1)
+void N_RAW_NIMCALL stbtt_GetGlyphBitmapBox(const stbtt_fontinfo *font, int glyph, float scale_x, float scale_y, int *ix0, int *iy0, int *ix1, int *iy1)
 {
    stbtt_GetGlyphBitmapBoxSubpixel(font, glyph, scale_x, scale_y,0.0f,0.0f, ix0, iy0, ix1, iy1);
 }
@@ -1951,7 +1951,7 @@ void stbtt_MakeGlyphBitmapSubpixel(const stbtt_fontinfo *info, unsigned char *ou
    STBTT_free(vertices, info->userdata);
 }
 
-void stbtt_MakeGlyphBitmap(const stbtt_fontinfo *info, unsigned char *output, int out_w, int out_h, int out_stride, float scale_x, float scale_y, int glyph)
+void N_RAW_NIMCALL stbtt_MakeGlyphBitmap(const stbtt_fontinfo *info, unsigned char *output, int out_w, int out_h, int out_stride, float scale_x, float scale_y, int glyph)
 {
    stbtt_MakeGlyphBitmapSubpixel(info, output, out_w, out_h, out_stride, scale_x, scale_y, 0.0f,0.0f, glyph);
 }
