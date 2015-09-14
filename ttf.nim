@@ -1,6 +1,5 @@
 
 import math
-import unsigned
 
 proc malloc(size: int): pointer {.header:"<stdlib.h>".}
 
@@ -35,7 +34,7 @@ proc malloc(size: int): pointer {.header:"<stdlib.h>".}
 //       "Zer" on mollyrocket (with fix)
 //       Cass Everitt
 //       stoiko (Haemimont Games)
-//       Brian Hook 
+//       Brian Hook
 //       Walter van Niftrik
 //       David Gow
 //       David Given
@@ -216,7 +215,7 @@ proc malloc(size: int): pointer {.header:"<stdlib.h>".}
 //   Curve tesselation                  120 LOC   \__ 550 LOC Bitmap creation
 //   Bitmap management                  100 LOC   /
 //   Baked bitmap interface              70 LOC  /
-//   Font name matching & access        150 LOC  ---- 150 
+//   Font name matching & access        150 LOC  ---- 150
 //   C runtime library abstraction       60 LOC  ----  60
 
 
@@ -291,7 +290,7 @@ int main(int argc, char **argv)
    }
    return 0;
 }
-#endif 
+#endif
 //
 // Output:
 //
@@ -305,9 +304,9 @@ int main(int argc, char **argv)
 //  :@@.  M@M
 //   @@@o@@@@
 //   :M@@V:@@.
-//  
+//
 //////////////////////////////////////////////////////////////////////////////
-// 
+//
 // Complete program: print "Hello World!" banner, with bugs
 //
 #if 0
@@ -458,25 +457,7 @@ type stbtt_aligned_quad* {.exportc.} = object
     x1*, y1*, s1*, t1*: cfloat # bottom-right
 
 
-proc stbtt_GetBakedQuad*(bakedChar: stbtt_bakedchar, pw, ph: int,  # same data as above
-                               xpos, ypos: var cfloat,     # pointers to current position in screen pixel space
-                               q: var stbtt_aligned_quad,  # output: quad to draw
-                               opengl_fillrule: bool       # true if opengl fill rule; false if DX9 or earlier
-                               ) {.exportc.}
-
-# Call GetBakedQuad with char_index = 'character - first_char', and it
-# creates the quad you need to draw and advances the current position.
-#
-# The coordinate system used assumes y increases downwards.
-#
-# Characters will extend both above and below the current position;
-# see discussion of "BASELINE" above.
-#
-# It's inefficient; you might want to c&p it and optimize it.
-
-
 {.emit: """
-
 
 //////////////////////////////////////////////////////////////////////////////
 //
@@ -580,14 +561,6 @@ struct stbtt_pack_context {
 #
 type font_type* {.unchecked.} = array[999999999, uint8]
 
-proc stbtt_GetFontOffsetForIndex(font_collection: font_type, index: cint): cint {.exportc.}
-
-# Each .ttf/.ttc file may have more than one font. Each font has a sequential
-# index number starting from 0. Call this function to get the font offset for
-# a given index; it returns -1 if the index is out of range. A regular .ttf
-# file will only define one font and it always be at offset 0, so it will
-# return '0' for index 0, and -1 for all other indices. You can just skip
-# this step if you know it's that kind of font.
 
 # The following structure is defined publically so you can declare one on
 # the stack or as a global or etc, but you should treat it as opaque.
@@ -627,49 +600,7 @@ proc stbtt_FindGlyphIndex*(info: stbtt_fontinfo, unicode_codepoint: cint): cint 
 # CHARACTER PROPERTIES
 #
 
-#proc stbtt_ScaleForPixelHeight*(info: var stbtt_fontinfo, height: cfloat): cfloat {.exportc.}
-# computes a scale factor to produce a font whose "height" is 'pixels' tall.
-# Height is measured as the distance from the highest ascender to the lowest
-# descender; in other words, it's equivalent to calling stbtt_GetFontVMetrics
-# and computing:
-#       scale = pixels / (ascent - descent)
-# so if you prefer to measure height by the ascent only, use a similar calculation.
-
 {.emit: """
-
-extern float stbtt_ScaleForMappingEmToPixels(const stbtt_fontinfo *info, float pixels);
-// computes a scale factor to produce a font whose EM size is mapped to
-// 'pixels' tall. This is probably what traditional APIs compute, but
-// I'm not positive.
-
-extern void stbtt_GetFontVMetrics(const stbtt_fontinfo *info, int *ascent, int *descent, int *lineGap);
-// ascent is the coordinate above the baseline the font extends; descent
-// is the coordinate below the baseline the font extends (i.e. it is typically negative)
-// lineGap is the spacing between one row's descent and the next row's ascent...
-// so you should advance the vertical position by "*ascent - *descent + *lineGap"
-//   these are expressed in unscaled coordinates, so you must multiply by
-//   the scale factor for a given size
-
-extern void stbtt_GetCodepointHMetrics(const stbtt_fontinfo *info, int codepoint, int *advanceWidth, int *leftSideBearing);
-// leftSideBearing is the offset from the current horizontal position to the left edge of the character
-// advanceWidth is the offset from the current horizontal position to the next horizontal position
-//   these are expressed in unscaled coordinates
-
-extern int  stbtt_GetCodepointKernAdvance(const stbtt_fontinfo *info, int ch1, int ch2);
-// an additional amount to add to the 'advance' value between ch1 and ch2
-
-extern int stbtt_GetCodepointBox(const stbtt_fontinfo *info, int codepoint, int *x0, int *y0, int *x1, int *y1);
-// Gets the bounding box of the visible part of the glyph, in unscaled coordinates
-
-extern int  stbtt_GetGlyphKernAdvance(const stbtt_fontinfo *info, int glyph1, int glyph2);
-""".}
-
-proc stbtt_GetGlyphHMetrics*(info: stbtt_fontinfo, glyph_index: cint, advanceWidth, leftSideBearing: var cint) {.exportc.}
-proc stbtt_GetGlyphBox*(info: stbtt_fontinfo, glyph_index: cint, x0, y0, x1, y1: ptr cint): cint {.exportc.}
-# as above, but takes one or more glyph indices for greater efficiency
-
-{.emit: """
-
 
 //////////////////////////////////////////////////////////////////////////////
 //
@@ -679,7 +610,7 @@ proc stbtt_GetGlyphBox*(info: stbtt_fontinfo, glyph_index: cint, x0, y0, x1, y1:
 
 enum
 {
-    STBTT_vmove = 1, 
+    STBTT_vmove = 1,
     STBTT_vline,
     STBTT_vcurve
 };
@@ -702,7 +633,6 @@ type stbtt_vertex {.exportc.} = object
 
 
 {.emit: """
-
 
 extern int stbtt_GetCodepointShape(const stbtt_fontinfo *info, int unicode_codepoint, stbtt_vertex **vertices);
 extern int stbtt_GetGlyphShape(const stbtt_fontinfo *info, int glyph_index, stbtt_vertex **vertices);
@@ -750,17 +680,6 @@ extern void stbtt_MakeCodepointBitmapSubpixel(const stbtt_fontinfo *info, unsign
 // same as stbtt_MakeCodepointBitmap, but you can specify a subpixel
 // shift for the character
 
-extern void stbtt_GetCodepointBitmapBox(const stbtt_fontinfo *font, int codepoint, float scale_x, float scale_y, int *ix0, int *iy0, int *ix1, int *iy1);
-// get the bbox of the bitmap centered around the glyph origin; so the
-// bitmap width is ix1-ix0, height is iy1-iy0, and location to place
-// the bitmap top left is (leftSideBearing*scale,iy0).
-// (Note that the bitmap uses y-increases-down, but the shape uses
-// y-increases-up, so CodepointBitmapBox and CodepointBox are inverted.)
-
-extern void stbtt_GetCodepointBitmapBoxSubpixel(const stbtt_fontinfo *font, int codepoint, float scale_x, float scale_y, float shift_x, float shift_y, int *ix0, int *iy0, int *ix1, int *iy1);
-// same as stbtt_GetCodepointBitmapBox, but you can specify a subpixel
-// shift for the character
-
 // the following functions are equivalent to the above functions, but operate
 // on glyph indices instead of Unicode codepoints (for efficiency)
 extern unsigned char *stbtt_GetGlyphBitmap(const stbtt_fontinfo *info, float scale_x, float scale_y, int glyph, int *width, int *height, int *xoff, int *yoff);
@@ -772,17 +691,21 @@ proc stbtt_MakeGlyphBitmapSubpixel*(info: stbtt_fontinfo, output: ptr byte, out_
 proc stbtt_GetGlyphBitmapBox*(info: stbtt_fontinfo, glyph: cint, scale_x, scale_y: cfloat, ix0, iy0, ix1, iy1: var cint) {.importc.}
 proc stbtt_GetGlyphBitmapBoxSubpixel*(info: stbtt_fontinfo, glyph: cint, scale_x, scale_y, shift_x, shift_y: cfloat, ix0, iy0, ix1, iy1: var cint) {.importc.}
 
-{.emit: """
+type stbtt_bitmap {.exportc.} = object
+    w,h,stride: cint
+    pixels: ptr uint8
 
+{.emit: """
+/*
 // @TODO: don't expose this structure
 typedef struct
 {
    int w,h,stride;
    unsigned char *pixels;
-} stbtt__bitmap;
+} stbtt_bitmap;
 
-extern void stbtt_Rasterize(stbtt__bitmap *result, float flatness_in_pixels, stbtt_vertex *vertices, int num_verts, float scale_x, float scale_y, float shift_x, float shift_y, int x_off, int y_off, int invert, void *userdata);
-
+extern void stbtt_Rasterize(stbtt_bitmap *result, float flatness_in_pixels, stbtt_vertex *vertices, int num_verts, float scale_x, float scale_y, float shift_x, float shift_y, int x_off, int y_off, int invert, void *userdata);
+*/
 //////////////////////////////////////////////////////////////////////////////
 //
 // Finding the right font...
@@ -955,7 +878,15 @@ proc stbtt_find_table(data: font_type, fontstart: uint32, tag: cstring): uint32 
         if stbtt_tag(data, loc + 0, tag):
             return ttULONG(data, loc + 8)
 
-proc stbtt_GetFontOffsetForIndex(font_collection: font_type, index: cint): cint =
+proc stbtt_GetFontOffsetForIndex(font_collection: font_type, index: cint): cint {.exportc.} =
+    # Each .ttf/.ttc file may have more than one font. Each font has a sequential
+    # index number starting from 0. Call this function to get the font offset for
+    # a given index; it returns -1 if the index is out of range. A regular .ttf
+    # file will only define one font and it always be at offset 0, so it will
+    # return '0' for index 0, and -1 for all other indices. You can just skip
+    # this step if you know it's that kind of font.
+
+
     # if it's just a font, there's only one valid index
     if stbtt_isfont(font_collection):
         return if index == 0: 0 else: -1
@@ -1021,7 +952,7 @@ proc stbtt_InitFont*(info: var stbtt_fontinfo, data: font_type, fontstart: cint)
     return 1
 
 {.emit: """
-int N_RAW_NIMCALL stbtt_FindGlyphIndex(const stbtt_fontinfo *info, int unicode_codepoint)
+int N_RAW_NIMCALL stbtt_FindGlyphIndex(stbtt_fontinfo *info, int unicode_codepoint)
 {
    stbtt_uint8 *data = info->data;
    stbtt_uint32 index_map = info->index_map;
@@ -1113,12 +1044,12 @@ int N_RAW_NIMCALL stbtt_FindGlyphIndex(const stbtt_fontinfo *info, int unicode_c
    return 0;
 }
 
-int stbtt_GetCodepointShape(const stbtt_fontinfo *info, int unicode_codepoint, stbtt_vertex **vertices)
-{
-   return stbtt_GetGlyphShape(info, stbtt_FindGlyphIndex(info, unicode_codepoint), vertices);
-}
-
 """.}
+
+proc stbtt_GetGlyphShape(info: stbtt_fontinfo, glyph_index: cint, pvertices: ptr ptr stbtt_vertex): cint {.importc.}
+
+proc stbtt_GetCodepointShape*(info: stbtt_fontinfo, unicode_codepoint: cint, vertices: ptr ptr stbtt_vertex): cint =
+    stbtt_GetGlyphShape(info, stbtt_FindGlyphIndex(info, unicode_codepoint), vertices)
 
 proc stbtt_setvertex(v: var stbtt_vertex, t: STBTT_type, x, y, cx, cy: int32) {.exportc.} =
     v.`type` = t
@@ -1141,15 +1072,16 @@ proc stbtt_GetGlyfOffset(info: stbtt_fontinfo, glyph_index: cint): cint {.export
 
     result = if g1==g2: -1 else: g1 # if length is 0, return -1
 
-proc stbtt_GetGlyphBox*(info: stbtt_fontinfo, glyph_index: cint, x0, y0, x1, y1: ptr cint): cint =
+proc stbtt_GetGlyphBox*(info: stbtt_fontinfo, glyph_index: cint, x0, y0, x1, y1: ptr cint): bool =
+    # as above, but takes one or more glyph indices for greater efficiency
     let g = stbtt_GetGlyfOffset(info, glyph_index)
-    if g < 0: return 0
+    if g < 0: return false
 
     if x0 != nil: x0[] = ttSHORT(info.data[], g + 2)
     if y0 != nil: y0[] = ttSHORT(info.data[], g + 4)
     if x1 != nil: x1[] = ttSHORT(info.data[], g + 6)
     if y1 != nil: y1[] = ttSHORT(info.data[], g + 8)
-    return 1
+    return true
 
 proc stbtt_IsGlyphEmpty*(info: stbtt_fontinfo, glyph_index: cint): bool =
     # returns non-zero if nothing is drawn for this glyph
@@ -1158,28 +1090,27 @@ proc stbtt_IsGlyphEmpty*(info: stbtt_fontinfo, glyph_index: cint): bool =
     let numberOfContours = ttSHORT(info.data[], g)
     return numberOfContours == 0
 
+proc stbtt_GetCodepointBox*(info: stbtt_fontinfo, codepoint: cint, x0, y0, x1, y1: ptr cint): bool =
+    # Gets the bounding box of the visible part of the glyph, in unscaled coordinates
+    stbtt_GetGlyphBox(info, stbtt_FindGlyphIndex(info,codepoint), x0,y0,x1,y1)
+
+proc stbtt_close_shape(vertices: ptr stbtt_vertex, num_vertices, was_off, start_off: cint,
+         sx, sy, scx, scy, cx, cy: int32): cint {.exportc.} =
+    result = num_vertices
+    if start_off != 0:
+        if was_off != 0:
+            {.emit: "stbtt_setvertex(&`vertices`[`result`], STBTT_vcurve, (`cx`+`scx`)>>1, (`cy`+`scy`)>>1, `cx`,`cy`);".}
+            inc result
+        {.emit: "stbtt_setvertex(&`vertices`[`result`], STBTT_vcurve, `sx`,`sy`,`scx`,`scy`);".}
+        inc result
+    else:
+        if was_off != 0:
+            {.emit: "stbtt_setvertex(&`vertices`[`result`], STBTT_vcurve,`sx`,`sy`,`cx`,`cy`);".}
+        else:
+            {.emit: "stbtt_setvertex(&`vertices`[`result`], STBTT_vline,`sx`,`sy`,0,0);".}
+        inc result
+
 {.emit: """
-
-int stbtt_GetCodepointBox(const stbtt_fontinfo *info, int codepoint, int *x0, int *y0, int *x1, int *y1)
-{
-   return stbtt_GetGlyphBox(info, stbtt_FindGlyphIndex(info,codepoint), x0,y0,x1,y1);
-}
-
-static int stbtt__close_shape(stbtt_vertex *vertices, int num_vertices, int was_off, int start_off,
-    stbtt_int32 sx, stbtt_int32 sy, stbtt_int32 scx, stbtt_int32 scy, stbtt_int32 cx, stbtt_int32 cy)
-{
-   if (start_off) {
-      if (was_off)
-         stbtt_setvertex(&vertices[num_vertices++], STBTT_vcurve, (cx+scx)>>1, (cy+scy)>>1, cx,cy);
-      stbtt_setvertex(&vertices[num_vertices++], STBTT_vcurve, sx,sy,scx,scy);
-   } else {
-      if (was_off)
-         stbtt_setvertex(&vertices[num_vertices++], STBTT_vcurve,sx,sy,cx,cy);
-      else
-         stbtt_setvertex(&vertices[num_vertices++], STBTT_vline,sx,sy,0,0);
-   }
-   return num_vertices;
-}
 
 int stbtt_GetGlyphShape(const stbtt_fontinfo *info, int glyph_index, stbtt_vertex **pvertices)
 {
@@ -1275,9 +1206,9 @@ int stbtt_GetGlyphShape(const stbtt_fontinfo *info, int glyph_index, stbtt_verte
 
          if (next_move == i) {
             if (i != 0)
-               num_vertices = stbtt__close_shape(vertices, num_vertices, was_off, start_off, sx,sy,scx,scy,cx,cy);
+               num_vertices = stbtt_close_shape(vertices, num_vertices, was_off, start_off, sx,sy,scx,scy,cx,cy);
 
-            // now start the new one               
+            // now start the new one
             start_off = !(flags & 1);
             if (start_off) {
                // if we start off with an off-curve point, then when we need to find a point on the curve
@@ -1318,7 +1249,7 @@ int stbtt_GetGlyphShape(const stbtt_fontinfo *info, int glyph_index, stbtt_verte
             }
          }
       }
-      num_vertices = stbtt__close_shape(vertices, num_vertices, was_off, start_off, sx,sy,scx,scy,cx,cy);
+      num_vertices = stbtt_close_shape(vertices, num_vertices, was_off, start_off, sx,sy,scx,scy,cx,cy);
    } else if (numberOfContours == -1) {
       // Compound shapes.
       int more = 1;
@@ -1330,7 +1261,7 @@ int stbtt_GetGlyphShape(const stbtt_fontinfo *info, int glyph_index, stbtt_verte
          int comp_num_verts = 0, i;
          stbtt_vertex *comp_verts = 0, *tmp = 0;
          float mtx[6] = {1,0,0,1,0,0}, m, n;
-         
+
          flags = ttSHORT(comp); comp+=2;
          gidx = ttSHORT(comp); comp+=2;
 
@@ -1360,7 +1291,7 @@ int stbtt_GetGlyphShape(const stbtt_fontinfo *info, int glyph_index, stbtt_verte
             mtx[2] = ttSHORT(comp)/16384.0f; comp+=2;
             mtx[3] = ttSHORT(comp)/16384.0f; comp+=2;
          }
-         
+
          // Find transformation scales.
          m = (float) STBTT_sqrt(mtx[0]*mtx[0] + mtx[1]*mtx[1]);
          n = (float) STBTT_sqrt(mtx[2]*mtx[2] + mtx[3]*mtx[3]);
@@ -1408,7 +1339,7 @@ int stbtt_GetGlyphShape(const stbtt_fontinfo *info, int glyph_index, stbtt_verte
 }
 """.}
 
-proc stbtt_GetGlyphHMetrics(info: stbtt_fontinfo, glyph_index: cint, advanceWidth, leftSideBearing: var cint) =
+proc stbtt_GetGlyphHMetrics*(info: stbtt_fontinfo, glyph_index: cint, advanceWidth, leftSideBearing: var cint) {.exportc.} =
     let numOfLongHorMetrics = ttUSHORT(info.data[], info.hhea + 34).int
     if glyph_index < numOfLongHorMetrics:
         advanceWidth    = ttSHORT(info.data[], info.hmtx + 4 * glyph_index)
@@ -1417,52 +1348,56 @@ proc stbtt_GetGlyphHMetrics(info: stbtt_fontinfo, glyph_index: cint, advanceWidt
         advanceWidth    = ttSHORT(info.data[], info.hmtx + 4 * (numOfLongHorMetrics - 1))
         leftSideBearing = ttSHORT(info.data[], info.hmtx + 4 * numOfLongHorMetrics + 2 * (glyph_index - numOfLongHorMetrics))
 
-{.emit: """
-int  stbtt_GetGlyphKernAdvance(const stbtt_fontinfo *info, int glyph1, int glyph2)
-{
-   stbtt_uint8 *data = info->data + info->kern;
-   stbtt_uint32 needle, straw;
-   int l, r, m;
+proc stbtt_GetGlyphKernAdvance*(info: stbtt_fontinfo, glyph1, glyph2: cint): cint =
+    {.emit: """
+    stbtt_uint8 *data = `info`->data + `info`->kern;
+    stbtt_uint32 needle, straw;
+    int l, r, m;
 
-   // we only look at the first table. it must be 'horizontal' and format 0.
-   if (!info->kern)
-      return 0;
-   if (ttUSHORT(data+2) < 1) // number of tables, need at least 1
-      return 0;
-   if (ttUSHORT(data+8) != 1) // horizontal flag must be set in format
-      return 0;
+    // we only look at the first table. it must be 'horizontal' and format 0.
+    if (!`info`->kern)
+       return 0;
+    if (ttUSHORT(data+2) < 1) // number of tables, need at least 1
+       return 0;
+    if (ttUSHORT(data+8) != 1) // horizontal flag must be set in format
+       return 0;
 
-   l = 0;
-   r = ttUSHORT(data+10) - 1;
-   needle = glyph1 << 16 | glyph2;
-   while (l <= r) {
-      m = (l + r) >> 1;
-      straw = ttULONG(data+18+(m*6)); // note: unaligned read
-      if (needle < straw)
-         r = m - 1;
-      else if (needle > straw)
-         l = m + 1;
-      else
-         return ttSHORT(data+22+(m*6));
-   }
-   return 0;
-}
+    l = 0;
+    r = ttUSHORT(data+10) - 1;
+    needle = `glyph1` << 16 | `glyph2`;
+    while (l <= r) {
+       m = (l + r) >> 1;
+       straw = ttULONG(data+18+(m*6)); // note: unaligned read
+       if (needle < straw)
+           r = m - 1;
+       else if (needle > straw)
+           l = m + 1;
+       else
+           return ttSHORT(data+22+(m*6));
+    }
+    return 0;
+    """.}
 
-int  stbtt_GetCodepointKernAdvance(const stbtt_fontinfo *info, int ch1, int ch2)
-{
-   if (!info->kern) // if no kerning table, don't waste time looking up both codepoint->glyphs
-      return 0;
-   return stbtt_GetGlyphKernAdvance(info, stbtt_FindGlyphIndex(info,ch1), stbtt_FindGlyphIndex(info,ch2));
-}
+proc stbtt_GetCodepointKernAdvance*(info: stbtt_fontinfo, ch1, ch2: cint): cint =
+    # an additional amount to add to the 'advance' value between ch1 and ch2
+    if info.kern == 0: # if no kerning table, don't waste time looking up both codepoint->glyphs
+       return 0
+    return stbtt_GetGlyphKernAdvance(info, stbtt_FindGlyphIndex(info, ch1), stbtt_FindGlyphIndex(info, ch2))
 
-void stbtt_GetCodepointHMetrics(const stbtt_fontinfo *info, int codepoint, int *advanceWidth, int *leftSideBearing)
-{
-   stbtt_GetGlyphHMetrics(info, stbtt_FindGlyphIndex(info,codepoint), advanceWidth, leftSideBearing);
-}
-
-""".}
+proc stbtt_GetCodepointHMetrics*(info: stbtt_fontinfo, codepoint: cint, advanceWidth, leftSideBearing: var cint) =
+    # leftSideBearing is the offset from the current horizontal position to the left edge of the character
+    # advanceWidth is the offset from the current horizontal position to the next horizontal position
+    # these are expressed in unscaled coordinates
+    stbtt_GetGlyphHMetrics(info, stbtt_FindGlyphIndex(info,codepoint), advanceWidth, leftSideBearing)
 
 proc stbtt_GetFontVMetrics*(info: stbtt_fontinfo, ascent, descent, lineGap: var cint) =
+    # ascent is the coordinate above the baseline the font extends; descent
+    # is the coordinate below the baseline the font extends (i.e. it is typically negative)
+    # lineGap is the spacing between one row's descent and the next row's ascent...
+    # so you should advance the vertical position by "*ascent - *descent + *lineGap"
+    #   these are expressed in unscaled coordinates, so you must multiply by
+    #   the scale factor for a given size
+
     ascent  = ttSHORT(info.data[], info.hhea + 4)
     descent = ttSHORT(info.data[], info.hhea + 6)
     lineGap = ttSHORT(info.data[], info.hhea + 8)
@@ -1475,60 +1410,66 @@ proc stbtt_GetFontBoundingBox*(info: stbtt_fontinfo, x0, y0, x1, y1: var int) =
     y1 = ttSHORT(info.data[], info.head + 42)
 
 proc stbtt_ScaleForPixelHeight*(info: stbtt_fontinfo, height: cfloat): cfloat {.exportc.} =
+    # computes a scale factor to produce a font whose "height" is 'pixels' tall.
+    # Height is measured as the distance from the highest ascender to the lowest
+    # descender; in other words, it's equivalent to calling stbtt_GetFontVMetrics
+    # and computing:
+    #       scale = pixels / (ascent - descent)
+    # so if you prefer to measure height by the ascent only, use a similar calculation.
+
     let fheight = ttSHORT(info.data[], info.hhea + 4) - ttSHORT(info.data[], info.hhea + 6)
     result = height / fheight.cfloat
 
-{.emit: """
+proc stbtt_ScaleForMappingEmToPixels(info: stbtt_fontinfo, pixels: cfloat): cfloat {.exportc.} =
+   ## computes a scale factor to produce a font whose EM size is mapped to
+   ## 'pixels' tall. This is probably what traditional APIs compute, but
+   ## I'm not positive.
+   return pixels / ttUSHORT(info.data[], info.head + 18).cfloat
 
-float stbtt_ScaleForMappingEmToPixels(const stbtt_fontinfo *info, float pixels)
-{
-   int unitsPerEm = ttUSHORT(info->data + info->head + 18);
-   return pixels / unitsPerEm;
-}
+
+{.emit: """
 
 void stbtt_FreeShape(const stbtt_fontinfo *info, stbtt_vertex *v)
 {
    STBTT_free(v, info->userdata);
 }
 
-//////////////////////////////////////////////////////////////////////////////
-//
-// antialiasing software rasterizer
-//
-
-void stbtt_GetGlyphBitmapBoxSubpixel(const stbtt_fontinfo *font, int glyph, float scale_x, float scale_y,float shift_x, float shift_y, int *ix0, int *iy0, int *ix1, int *iy1)
-{
-   int x0,y0,x1,y1;
-   if (!stbtt_GetGlyphBox(font, glyph, &x0,&y0,&x1,&y1)) {
-      // e.g. space character
-      if (ix0) *ix0 = 0;
-      if (iy0) *iy0 = 0;
-      if (ix1) *ix1 = 0;
-      if (iy1) *iy1 = 0;
-   } else {
-      // move to integral bboxes (treating pixels as little squares, what pixels get touched)?
-      if (ix0) *ix0 = STBTT_ifloor( x0 * scale_x + shift_x);
-      if (iy0) *iy0 = STBTT_ifloor(-y1 * scale_y + shift_y);
-      if (ix1) *ix1 = STBTT_iceil ( x1 * scale_x + shift_x);
-      if (iy1) *iy1 = STBTT_iceil (-y0 * scale_y + shift_y);
-   }
-}
-
-void N_RAW_NIMCALL stbtt_GetGlyphBitmapBox(const stbtt_fontinfo *font, int glyph, float scale_x, float scale_y, int *ix0, int *iy0, int *ix1, int *iy1)
-{
-   stbtt_GetGlyphBitmapBoxSubpixel(font, glyph, scale_x, scale_y,0.0f,0.0f, ix0, iy0, ix1, iy1);
-}
-
-void stbtt_GetCodepointBitmapBoxSubpixel(const stbtt_fontinfo *font, int codepoint, float scale_x, float scale_y, float shift_x, float shift_y, int *ix0, int *iy0, int *ix1, int *iy1)
-{
-   stbtt_GetGlyphBitmapBoxSubpixel(font, stbtt_FindGlyphIndex(font,codepoint), scale_x, scale_y,shift_x,shift_y, ix0,iy0,ix1,iy1);
-}
-
-void stbtt_GetCodepointBitmapBox(const stbtt_fontinfo *font, int codepoint, float scale_x, float scale_y, int *ix0, int *iy0, int *ix1, int *iy1)
-{
-   stbtt_GetCodepointBitmapBoxSubpixel(font, codepoint, scale_x, scale_y,0.0f,0.0f, ix0,iy0,ix1,iy1);
-}
 """.}
+
+################################################################################
+#
+# antialiasing software rasterizer
+#
+proc stbtt_GetGlyphBitmapBoxSubpixel(info: stbtt_fontinfo, glyph: cint, scale_x, scale_y, shift_x, shift_y: cfloat, ix0, iy0, ix1, iy1: ptr cint) {.exportc.} =
+    var x0, y0, x1, y1: cint
+    if not stbtt_GetGlyphBox(info, glyph, addr x0, addr y0, addr x1, addr y1):
+        # e.g. space character
+        if not ix0.isNil: ix0[] = 0
+        if not iy0.isNil: iy0[] = 0
+        if not ix1.isNil: ix1[] = 0
+        if not iy1.isNil: iy1[] = 0
+    else:
+       # move to integral bboxes (treating pixels as little squares, what pixels get touched)?
+       if not ix0.isNil: ix0[] = floor( x0.cfloat * scale_x + shift_x).cint
+       if not iy0.isNil: iy0[] = floor(-y1.cfloat * scale_y + shift_y).cint
+       if not ix1.isNil: ix1[] = ceil ( x1.cfloat * scale_x + shift_x).cint
+       if not iy1.isNil: iy1[] = ceil (-y0.cfloat * scale_y + shift_y).cint
+
+proc stbtt_GetGlyphBitmapBox(info: stbtt_fontinfo, glyph: cint, scale_x, scale_y: cfloat, ix0, iy0, ix1, iy1: ptr cint) {.exportc.} =
+    stbtt_GetGlyphBitmapBoxSubpixel(info, glyph, scale_x, scale_y, 0.0, 0.0, ix0, iy0, ix1, iy1)
+
+proc stbtt_GetCodepointBitmapBoxSubpixel(info: stbtt_fontinfo, codepoint: cint, scale_x, scale_y, shift_x, shift_y: cfloat, ix0, iy0, ix1, iy1: ptr cint) {.exportc.} =
+    # same as stbtt_GetCodepointBitmapBox, but you can specify a subpixel
+    # shift for the character
+    stbtt_GetGlyphBitmapBoxSubpixel(info, stbtt_FindGlyphIndex(info, codepoint), scale_x, scale_y, shift_x, shift_y, ix0, iy0, ix1, iy1)
+
+proc stbtt_GetCodepointBitmapBox*(info: stbtt_fontinfo, codepoint: cint, scale_x, scale_y: cfloat, ix0, iy0, ix1, iy1: ptr cint) =
+    # get the bbox of the bitmap centered around the glyph origin; so the
+    # bitmap width is ix1-ix0, height is iy1-iy0, and location to place
+    # the bitmap top left is (leftSideBearing*scale,iy0).
+    # (Note that the bitmap uses y-increases-down, but the shape uses
+    # y-increases-up, so CodepointBitmapBox and CodepointBox are inverted.)
+    stbtt_GetCodepointBitmapBoxSubpixel(info, codepoint, scale_x, scale_y, 0.0, 0.0, ix0, iy0, ix1, iy1)
 
 type stbtt_edge {.exportc.} = object
     x0,y0, x1,y1: cfloat
@@ -1559,58 +1500,58 @@ proc new_active(e: ptr stbtt_edge, off_x: cint, start_point: cfloat, userdata: p
     result.next = nil
     result.valid = if e.invert != 0: 1 else: -1
 
-{.emit: """
+proc stbtt_fill_active_edges(scanline: ptr uint8, length: cint, e: ptr stbtt_active_edge, max_weight: cint) {.exportc.} =
+   # note: this routine clips fills that extend off the edges... ideally this
+   # wouldn't happen, but it could happen if the truetype glyph bounding boxes
+   # are wrong, or if the user supplies a too-small bitmap
+   {.emit: """
+   #define FIXSHIFT   10
+   #define FIX        (1 << FIXSHIFT)
+   #define FIXMASK    (FIX-1)
 
-#define FIXSHIFT   10
-#define FIX        (1 << FIXSHIFT)
-#define FIXMASK    (FIX-1)
-
-// note: this routine clips fills that extend off the edges... ideally this
-// wouldn't happen, but it could happen if the truetype glyph bounding boxes
-// are wrong, or if the user supplies a too-small bitmap
-static void stbtt__fill_active_edges(unsigned char *scanline, int len, stbtt_active_edge *e, int max_weight)
-{
    // non-zero winding fill
    int x0=0, w=0;
 
-   while (e) {
+   while (`e`) {
       if (w == 0) {
          // if we're currently at zero, we need to record the edge start point
-         x0 = e->x; w += e->valid;
+         x0 = `e`->x; w += `e`->valid;
       } else {
-         int x1 = e->x; w += e->valid;
+         int x1 = `e`->x; w += `e`->valid;
          // if we went to zero, we need to draw
          if (w == 0) {
             int i = x0 >> FIXSHIFT;
             int j = x1 >> FIXSHIFT;
 
-            if (i < len && j >= 0) {
+            if (i < `length` && j >= 0) {
                if (i == j) {
                   // x0,x1 are the same pixel, so compute combined coverage
-                  scanline[i] = scanline[i] + (stbtt_uint8) ((x1 - x0) * max_weight >> FIXSHIFT);
+                  `scanline`[i] = `scanline`[i] + (stbtt_uint8) ((x1 - x0) * `max_weight` >> FIXSHIFT);
                } else {
                   if (i >= 0) // add antialiasing for x0
-                     scanline[i] = scanline[i] + (stbtt_uint8) (((FIX - (x0 & FIXMASK)) * max_weight) >> FIXSHIFT);
+                     `scanline`[i] = `scanline`[i] + (stbtt_uint8) (((FIX - (x0 & FIXMASK)) * `max_weight`) >> FIXSHIFT);
                   else
                      i = -1; // clip
 
-                  if (j < len) // add antialiasing for x1
-                     scanline[j] = scanline[j] + (stbtt_uint8) (((x1 & FIXMASK) * max_weight) >> FIXSHIFT);
+                  if (j < `length`) // add antialiasing for x1
+                     `scanline`[j] = `scanline`[j] + (stbtt_uint8) (((x1 & FIXMASK) * `max_weight`) >> FIXSHIFT);
                   else
-                     j = len; // clip
+                     j = `length`; // clip
 
                   for (++i; i < j; ++i) // fill pixels between x0 and x1
-                     scanline[i] = scanline[i] + (stbtt_uint8) max_weight;
+                     `scanline`[i] = `scanline`[i] + (stbtt_uint8) `max_weight`;
                }
             }
          }
       }
-      
-      e = e->next;
-   }
-}
 
-static void stbtt__rasterize_sorted_edges(stbtt__bitmap *result, stbtt_edge *e, int n, int vsubsample, int off_x, int off_y, void *userdata)
+      `e` = `e`->next;
+   }
+   """.}
+
+
+{.emit:"""
+static void stbtt__rasterize_sorted_edges(stbtt_bitmap *result, stbtt_edge *e, int n, int vsubsample, int off_x, int off_y, void *userdata)
 {
    stbtt_active_edge *active = NULL;
    int y,j=0;
@@ -1693,7 +1634,7 @@ static void stbtt__rasterize_sorted_edges(stbtt__bitmap *result, stbtt_edge *e, 
 
          // now process all active edges in XOR fashion
          if (active)
-            stbtt__fill_active_edges(scanline, result->w, active, max_weight);
+            stbtt_fill_active_edges(scanline, result->w, active, max_weight);
 
          ++y;
       }
@@ -1726,45 +1667,44 @@ static int stbtt__edge_compare(const void *p, const void *q)
 type stbtt_point {.exportc.} = object
     x, y: cfloat
 
-{.emit: """
 
-static void stbtt__rasterize(stbtt__bitmap *result, stbtt_point *pts, int *wcount, int windings, float scale_x, float scale_y, float shift_x, float shift_y, int off_x, int off_y, int invert, void *userdata)
-{
-   float y_scale_inv = invert ? -scale_y : scale_y;
+proc stbtt_rasterize(result: ptr stbtt_bitmap, pts: ptr stbtt_point, wcount: ptr cint, windings: cint, scale_x, scale_y, shift_x, shift_y: cfloat, off_x, off_y, invert: cint, userdata: pointer) {.exportc.} =
+   {.emit: """
+   float y_scale_inv = invert ? -`scale_y` : `scale_y`;
    stbtt_edge *e;
    int n,i,j,k,m;
-   int vsubsample = result->h < 8 ? 15 : 5;
+   int vsubsample = `result`->h < 8 ? 15 : 5;
    // vsubsample should divide 255 evenly; otherwise we won't reach full opacity
 
    // now we have to blow out the windings into explicit edge lists
    n = 0;
-   for (i=0; i < windings; ++i)
-      n += wcount[i];
+   for (i=0; i < `windings`; ++i)
+      n += `wcount`[i];
 
    e = (stbtt_edge *) STBTT_malloc(sizeof(*e) * (n+1), userdata); // add an extra one as a sentinel
    if (e == 0) return;
    n = 0;
 
    m=0;
-   for (i=0; i < windings; ++i) {
-      stbtt_point *p = pts + m;
-      m += wcount[i];
-      j = wcount[i]-1;
-      for (k=0; k < wcount[i]; j=k++) {
+   for (i=0; i < `windings`; ++i) {
+      stbtt_point *p = `pts` + m;
+      m += `wcount`[i];
+      j = `wcount`[i]-1;
+      for (k=0; k < `wcount`[i]; j=k++) {
          int a=k,b=j;
          // skip the edge if horizontal
          if (p[j].y == p[k].y)
             continue;
          // add edge from j to k to the list
          e[n].invert = 0;
-         if (invert ? p[j].y > p[k].y : p[j].y < p[k].y) {
+         if (`invert` ? p[j].y > p[k].y : p[j].y < p[k].y) {
             e[n].invert = 1;
             a=j,b=k;
          }
-         e[n].x0 = p[a].x * scale_x + shift_x;
-         e[n].y0 = (p[a].y * y_scale_inv + shift_y) * vsubsample;
-         e[n].x1 = p[b].x * scale_x + shift_x;
-         e[n].y1 = (p[b].y * y_scale_inv + shift_y) * vsubsample;
+         e[n].x0 = p[a].x * `scale_x` + `shift_x`;
+         e[n].y0 = (p[a].y * y_scale_inv + `shift_y`) * vsubsample;
+         e[n].x1 = p[b].x * `scale_x` + `shift_x`;
+         e[n].y1 = (p[b].y * y_scale_inv + `shift_y`) * vsubsample;
          ++n;
       }
    }
@@ -1773,13 +1713,10 @@ static void stbtt__rasterize(stbtt__bitmap *result, stbtt_point *pts, int *wcoun
    STBTT_sort(e, n, sizeof(e[0]), stbtt__edge_compare);
 
    // now, traverse the scanlines and find the intersections on each scanline, use xor winding rule
-   stbtt__rasterize_sorted_edges(result, e, n, vsubsample, off_x, off_y, userdata);
+   stbtt__rasterize_sorted_edges(`result`, e, n, vsubsample, `off_x`, `off_y`, `userdata`);
 
    STBTT_free(e, userdata);
-}
-
-""".}
-
+   """.}
 
 proc stbtt_add_point(points: var openarray[stbtt_point], n: int, x, y: float) =
     if n < points.len: # during first pass, it's unallocated
@@ -1810,7 +1747,7 @@ proc toCArray[T](s: seq[T]): ptr T =
         p[i] = v
 
 # returns number of contours
-proc stbtt_FlattenCurves(vertices: openarray[stbtt_vertex], objspace_flatness: cfloat, contour_lengths: var ptr cint, num_contours: var cint, userdata: pointer): ptr[stbtt_point] {.exportc.} =
+proc stbtt_FlattenCurves(vertices: openarray[stbtt_vertex], objspace_flatness: cfloat, contour_lengths: var ptr cint, num_contours: var cint): ptr[stbtt_point] =
     var num_points : cint = 0
 
     let objspace_flatness_squared = objspace_flatness * objspace_flatness
@@ -1871,19 +1808,17 @@ proc stbtt_FlattenCurves(vertices: openarray[stbtt_vertex], objspace_flatness: c
 
     result = windings.toCArray()
 
-{.emit: """
+proc stbtt_Rasterize(result: ptr stbtt_bitmap, flatness_in_pixels: cfloat, vertices: openarray[stbtt_vertex], scale_x, scale_y, shift_x, shift_y: cfloat, x_off, y_off, invert: cint, userdata: pointer) {.exportc.} =
+    let scale = min(scale_x, scale_y)
+    var winding_count: cint
+    var winding_lengths: ptr cint
+    let windings = stbtt_FlattenCurves(vertices, cfloat(flatness_in_pixels / scale), winding_lengths, winding_count);
+    if not windings.isNil:
+        stbtt_rasterize(result, windings, winding_lengths, winding_count, scale_x, scale_y, shift_x, shift_y, x_off, y_off, invert, userdata)
+        #STBTT_free(winding_lengths, userdata)
+        #STBTT_free(windings, userdata)
 
-void stbtt_Rasterize(stbtt__bitmap *result, float flatness_in_pixels, stbtt_vertex *vertices, int num_verts, float scale_x, float scale_y, float shift_x, float shift_y, int x_off, int y_off, int invert, void *userdata)
-{
-   float scale = scale_x > scale_y ? scale_y : scale_x;
-   int winding_count, *winding_lengths;
-   stbtt_point *windings = stbtt_FlattenCurves(vertices, num_verts, flatness_in_pixels / scale, &winding_lengths, &winding_count, userdata);
-   if (windings) {
-      stbtt__rasterize(result, windings, winding_lengths, winding_count, scale_x, scale_y, shift_x, shift_y, x_off, y_off, invert, userdata);
-      STBTT_free(winding_lengths, userdata);
-      STBTT_free(windings, userdata);
-   }
-}
+{.emit: """
 
 void stbtt_FreeBitmap(unsigned char *bitmap, void *userdata)
 {
@@ -1893,8 +1828,8 @@ void stbtt_FreeBitmap(unsigned char *bitmap, void *userdata)
 unsigned char *stbtt_GetGlyphBitmapSubpixel(const stbtt_fontinfo *info, float scale_x, float scale_y, float shift_x, float shift_y, int glyph, int *width, int *height, int *xoff, int *yoff)
 {
    int ix0,iy0,ix1,iy1;
-   stbtt__bitmap gbm;
-   stbtt_vertex *vertices;   
+   stbtt_bitmap gbm;
+   stbtt_vertex *vertices;
    int num_verts = stbtt_GetGlyphShape(info, glyph, &vertices);
 
    if (scale_x == 0) scale_x = scale_y;
@@ -1914,7 +1849,7 @@ unsigned char *stbtt_GetGlyphBitmapSubpixel(const stbtt_fontinfo *info, float sc
    if (height) *height = gbm.h;
    if (xoff  ) *xoff   = ix0;
    if (yoff  ) *yoff   = iy0;
-   
+
    if (gbm.w && gbm.h) {
       gbm.pixels = (unsigned char *) STBTT_malloc(gbm.w * gbm.h, info->userdata);
       if (gbm.pixels) {
@@ -1925,7 +1860,7 @@ unsigned char *stbtt_GetGlyphBitmapSubpixel(const stbtt_fontinfo *info, float sc
    }
    STBTT_free(vertices, info->userdata);
    return gbm.pixels;
-}   
+}
 
 unsigned char *stbtt_GetGlyphBitmap(const stbtt_fontinfo *info, float scale_x, float scale_y, int glyph, int *width, int *height, int *xoff, int *yoff)
 {
@@ -1937,7 +1872,7 @@ void stbtt_MakeGlyphBitmapSubpixel(const stbtt_fontinfo *info, unsigned char *ou
    int ix0,iy0;
    stbtt_vertex *vertices;
    int num_verts = stbtt_GetGlyphShape(info, glyph, &vertices);
-   stbtt__bitmap gbm;   
+   stbtt_bitmap gbm;
 
    stbtt_GetGlyphBitmapBoxSubpixel(info, glyph, scale_x, scale_y, shift_x, shift_y, &ix0,&iy0,0,0);
    gbm.pixels = output;
@@ -1959,7 +1894,7 @@ void N_RAW_NIMCALL stbtt_MakeGlyphBitmap(const stbtt_fontinfo *info, unsigned ch
 unsigned char *stbtt_GetCodepointBitmapSubpixel(const stbtt_fontinfo *info, float scale_x, float scale_y, float shift_x, float shift_y, int codepoint, int *width, int *height, int *xoff, int *yoff)
 {
    return stbtt_GetGlyphBitmapSubpixel(info, scale_x, scale_y,shift_x,shift_y, stbtt_FindGlyphIndex(info,codepoint), width,height,xoff,yoff);
-}   
+}
 
 void stbtt_MakeCodepointBitmapSubpixel(const stbtt_fontinfo *info, unsigned char *output, int out_w, int out_h, int out_stride, float scale_x, float scale_y, float shift_x, float shift_y, int codepoint)
 {
@@ -1969,7 +1904,7 @@ void stbtt_MakeCodepointBitmapSubpixel(const stbtt_fontinfo *info, unsigned char
 unsigned char *stbtt_GetCodepointBitmap(const stbtt_fontinfo *info, float scale_x, float scale_y, int codepoint, int *width, int *height, int *xoff, int *yoff)
 {
    return stbtt_GetCodepointBitmapSubpixel(info, scale_x, scale_y, 0.0f,0.0f, codepoint, width,height,xoff,yoff);
-}   
+}
 
 void stbtt_MakeCodepointBitmap(const stbtt_fontinfo *info, unsigned char *output, int out_w, int out_h, int out_stride, float scale_x, float scale_y, int codepoint)
 {
@@ -2033,7 +1968,16 @@ proc stbtt_GetBakedQuad*(bakedChar: stbtt_bakedchar, pw, ph: int,  # same data a
                                xpos, ypos: var cfloat,     # pointers to current position in screen pixel space
                                q: var stbtt_aligned_quad,  # output: quad to draw
                                opengl_fillrule: bool       # true if opengl fill rule; false if DX9 or earlier
-                               ) =
+                               ) {.exportc.} =
+    # Call GetBakedQuad with char_index = 'character - first_char', and it
+    # creates the quad you need to draw and advances the current position.
+    #
+    # The coordinate system used assumes y increases downwards.
+    #
+    # Characters will extend both above and below the current position;
+    # see discussion of "BASELINE" above.
+    #
+    # It's inefficient; you might want to c&p it and optimize it.
     let
         d3d_bias = if opengl_fillrule: 0.0 else: -0.5
         ipw = 1.0 / pw.float
@@ -2319,7 +2263,7 @@ int stbtt_PackFontRanges(stbtt_pack_context *spc, unsigned char *fontdata, int f
    n = 0;
    for (i=0; i < num_ranges; ++i)
       n += ranges[i].num_chars_in_range;
-         
+
    rects = (stbrp_rect *) calloc(n, sizeof(*rects));
 
    if (rects == NULL)
@@ -2452,7 +2396,7 @@ void stbtt_GetPackedQuad(stbtt_packedchar *chardata, int pw, int ph, int char_in
 //
 
 // check if a utf8 string contains a prefix which is the utf16 string; if so return length of matching utf8 string
-static stbtt_int32 stbtt__CompareUTF8toUTF16_bigendian_prefix(const stbtt_uint8 *s1, stbtt_int32 len1, const stbtt_uint8 *s2, stbtt_int32 len2) 
+static stbtt_int32 stbtt__CompareUTF8toUTF16_bigendian_prefix(const stbtt_uint8 *s1, stbtt_int32 len1, const stbtt_uint8 *s2, stbtt_int32 len2)
 {
    stbtt_int32 i=0;
 
@@ -2491,7 +2435,7 @@ static stbtt_int32 stbtt__CompareUTF8toUTF16_bigendian_prefix(const stbtt_uint8 
    return i;
 }
 
-int stbtt_CompareUTF8toUTF16_bigendian(const char *s1, int len1, const char *s2, int len2) 
+int stbtt_CompareUTF8toUTF16_bigendian(const char *s1, int len1, const char *s2, int len2)
 {
    return len1 == stbtt__CompareUTF8toUTF16_bigendian_prefix((const stbtt_uint8*) s1, len1, (const stbtt_uint8*) s2, len2);
 }
@@ -2609,4 +2553,3 @@ int stbtt_FindMatchingFont(const unsigned char *font_collection, const char *nam
 #endif // STB_TRUETYPE_IMPLEMENTATION
 """
 .}
-
