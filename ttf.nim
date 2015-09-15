@@ -629,16 +629,6 @@ type stbtt_vertex {.exportc.} = object
 
 {.emit: """
 
-extern int stbtt_GetGlyphShape(stbtt_fontinfo *info, int glyph_index, stbtt_vertex **vertices);
-// returns # of vertices and fills *vertices with the pointer to them
-//   these are expressed in "unscaled" coordinates
-//
-// The shape is a series of countours. Each one starts with
-// a STBTT_moveto, then consists of a series of mixed
-// STBTT_lineto and STBTT_curveto segments. A lineto
-// draws a line from previous endpoint to its x,y; a curveto
-// draws a quadratic bezier from previous endpoint to
-// its x,y, using cx,cy as the bezier control point.
 
 extern void stbtt_FreeShape(const stbtt_fontinfo *info, stbtt_vertex *vertices);
 // frees the data allocated above
@@ -1041,10 +1031,10 @@ int N_RAW_NIMCALL stbtt_FindGlyphIndex(stbtt_fontinfo *info, int unicode_codepoi
 
 """.}
 
-proc stbtt_GetGlyphShape(info: stbtt_fontinfo, glyph_index: cint, pvertices: ptr ptr stbtt_vertex): cint {.exportc.}
+proc stbtt_GetGlyphShape*(info: stbtt_fontinfo, glyph_index: cint): seq[stbtt_vertex]
 
-proc stbtt_GetCodepointShape*(info: stbtt_fontinfo, unicode_codepoint: cint, vertices: ptr ptr stbtt_vertex): cint =
-    stbtt_GetGlyphShape(info, stbtt_FindGlyphIndex(info, unicode_codepoint), vertices)
+proc stbtt_GetCodepointShape*(info: stbtt_fontinfo, unicode_codepoint: cint): seq[stbtt_vertex] =
+    stbtt_GetGlyphShape(info, stbtt_FindGlyphIndex(info, unicode_codepoint))
 
 proc stbtt_setvertex(v: var stbtt_vertex, t: STBTT_type, x, y, cx, cy: int32) {.exportc.} =
     v.`type` = t
@@ -1089,24 +1079,23 @@ proc stbtt_GetCodepointBox*(info: stbtt_fontinfo, codepoint: cint, x0, y0, x1, y
     # Gets the bounding box of the visible part of the glyph, in unscaled coordinates
     stbtt_GetGlyphBox(info, stbtt_FindGlyphIndex(info,codepoint), x0,y0,x1,y1)
 
-proc stbtt_close_shape(vertices: ptr stbtt_vertex, num_vertices, was_off, start_off: cint,
+proc stbtt_close_shape(vertices: var openarray[stbtt_vertex], num_vertices, was_off, start_off: cint,
          sx, sy, scx, scy, cx, cy: int32): cint {.exportc.} =
     result = num_vertices
     if start_off != 0:
         if was_off != 0:
-            {.emit: "stbtt_setvertex(&`vertices`[`result`], STBTT_vcurve, (`cx`+`scx`)>>1, (`cy`+`scy`)>>1, `cx`,`cy`);".}
+            stbtt_setvertex(vertices[result], STBTT_vcurve, (cx+scx) shr 1, (cy+scy) shr 1, cx, cy)
             inc result
-        {.emit: "stbtt_setvertex(&`vertices`[`result`], STBTT_vcurve, `sx`,`sy`,`scx`,`scy`);".}
+        stbtt_setvertex(vertices[result], STBTT_vcurve, sx, sy, scx, scy)
         inc result
     else:
         if was_off != 0:
-            {.emit: "stbtt_setvertex(&`vertices`[`result`], STBTT_vcurve,`sx`,`sy`,`cx`,`cy`);".}
+            stbtt_setvertex(vertices[result], STBTT_vcurve, sx, sy, cx, cy)
         else:
-            {.emit: "stbtt_setvertex(&`vertices`[`result`], STBTT_vline,`sx`,`sy`,0,0);".}
+            stbtt_setvertex(vertices[result], STBTT_vline, sx, sy, 0, 0)
         inc result
 
-{.push stacktrace: off.}
-proc stbtt_GetGlyphShape(info: stbtt_fontinfo, glyph_index: cint, pvertices: ptr ptr stbtt_vertex): cint =
+proc stbtt_GetGlyphShape(info: stbtt_fontinfo, glyph_index: cint): seq[stbtt_vertex] =
   # returns # of vertices and fills *vertices with the pointer to them
   #   these are expressed in "unscaled" coordinates
   #
@@ -1117,18 +1106,16 @@ proc stbtt_GetGlyphShape(info: stbtt_fontinfo, glyph_index: cint, pvertices: ptr
   # draws a quadratic bezier from previous endpoint to
   # its x,y, using cx,cy as the bezier control point.
 
-  pvertices[] = nil
+  #pvertices[] = nil
 
   let g = stbtt_GetGlyfOffset(info, glyph_index)
-  if g < 0: return 0
+  if g < 0: return @[]
 
   let numberOfContours = ttSHORT(info.data[], g)
   var num_vertices: cint = 0
 
-  {.emit: """
-  stbtt_uint8 *data = `info`->data;
-  """.}
-  var vertices: ptr stbtt_vertex
+  #var vertices: ptr stbtt_vertex
+  var vertices : seq[stbtt_vertex]
 
   if numberOfContours > 0:
      var flags = 0'u8
@@ -1138,7 +1125,8 @@ proc stbtt_GetGlyphShape(info: stbtt_fontinfo, glyph_index: cint, pvertices: ptr
      var points = g + 10 + numberOfContours * 2 + 2 + ins
      let n : int32 = (1'u16 + ttUSHORT(info.data[], endPtsOfContours + numberOfContours * 2 - 2)).int32
      let m : int32 = n + 2 * numberOfContours # a loose bound on how many vertices we might need
-     vertices = cast[ptr stbtt_vertex](alloc(m * sizeof(stbtt_vertex)))
+     #vertices = cast[ptr stbtt_vertex](alloc(m * sizeof(stbtt_vertex)))
+     vertices = newSeq[stbtt_vertex](m)
 
      # in first pass, we load uninterpreted data into the allocated array
      # above, shifted to the end of the array so we won't overwrite it when
@@ -1157,12 +1145,12 @@ proc stbtt_GetGlyphShape(info: stbtt_fontinfo, glyph_index: cint, pvertices: ptr
                inc points
         else:
            dec flagcount
-        {.emit:"vertices[off+`i`].type = flags;".}
+        vertices[off+i].`type` = flags.STBTT_type
 
      # now load x coordinates
      var x: int32
      for i in 0 ..< n:
-        {.emit: "flags = vertices[off+`i`].type;".}
+        flags = vertices[off+i].`type`.uint8
         if (flags and 2) != 0:
            let dx : int16 = ttBYTE(info.data[], points).int16
            inc points
@@ -1171,13 +1159,13 @@ proc stbtt_GetGlyphShape(info: stbtt_fontinfo, glyph_index: cint, pvertices: ptr
            if (flags and 16) == 0:
               x = x + ttSHORT(info.data[], points)
               points += 2
-        {.emit: "vertices[off+`i`].x = (stbtt_int16) x;".}
+        vertices[off+i].x = x.int16
 
      # now load y coordinates
      var y: int32
 
      for i in 0 ..< n:
-        {.emit: "flags = vertices[off+`i`].type;".}
+        flags = vertices[off+i].`type`.uint8
         if (flags and 4) != 0:
            let dy = ttBYTE(info.data[], points).int16
            inc points
@@ -1186,7 +1174,7 @@ proc stbtt_GetGlyphShape(info: stbtt_fontinfo, glyph_index: cint, pvertices: ptr
            if (flags and 32) == 0:
               y += ttSHORT(info.data[], points)
               points += 2
-        {.emit: "vertices[off+`i`].y = (stbtt_int16) y;".}
+        vertices[off+i].y = y.int16
 
      # now convert them to our format
      var cx,cy,sx,sy, scx,scy: int32
@@ -1195,11 +1183,9 @@ proc stbtt_GetGlyphShape(info: stbtt_fontinfo, glyph_index: cint, pvertices: ptr
      var next_move : int32
      var i = 0
      while i < n:
-        {.emit: """
-        flags = vertices[off+`i`].type;
-        x     = (stbtt_int16) vertices[off+`i`].x;
-        y     = (stbtt_int16) vertices[off+`i`].y;
-        """.}
+        flags = vertices[off+i].`type`.uint8
+        x     = vertices[off+i].x.int16;
+        y     = vertices[off+i].y.int16;
 
         if next_move == i:
            if i != 0:
@@ -1211,22 +1197,19 @@ proc stbtt_GetGlyphShape(info: stbtt_fontinfo, glyph_index: cint, pvertices: ptr
               # where we can start, and we need to save some state for when we wraparound.
               scx = x
               scy = y
-              {.emit: """
-              if (!(vertices[off+`i`+1].type & 1)) {
-                 // next point is also a curve point, so interpolate an on-point curve
-                 sx = (x + (stbtt_int32) vertices[off+`i`+1].x) >> 1;
-                 sy = (y + (stbtt_int32) vertices[off+`i`+1].y) >> 1;
-              } else {
-                 // otherwise just use the next point as our start point
-                 sx = (stbtt_int32) vertices[off+`i`+1].x;
-                 sy = (stbtt_int32) vertices[off+`i`+1].y;
-                 ++`i`; // we're using point i+1 as the starting point, so skip it
-              }
-              """.}
+              if (vertices[off+i+1].`type`.uint16 and 1) == 0:
+                 # next point is also a curve point, so interpolate an on-point curve
+                 sx = (x + vertices[off+i+1].x.int32) shr 1
+                 sy = (y + vertices[off+`i`+1].y.int32) shr 1
+              else:
+                 # otherwise just use the next point as our start point
+                 sx = vertices[off+i+1].x.int32;
+                 sy = vertices[off+i+1].y.int32;
+                 inc i # we're using point i+1 as the starting point, so skip it
            else:
               sx = x
               sy = y
-           {.emit: "stbtt_setvertex(&vertices[`num_vertices`], STBTT_vmove,sx,sy,0,0);".}
+           stbtt_setvertex(vertices[num_vertices], STBTT_vmove,sx,sy,0,0)
            inc num_vertices
            was_off = 0
            next_move = (1'u16 + ttUSHORT(info.data[], endPtsOfContours + j * 2)).int32
@@ -1234,15 +1217,16 @@ proc stbtt_GetGlyphShape(info: stbtt_fontinfo, glyph_index: cint, pvertices: ptr
         else:
            if (flags and 1) == 0: # if it's a curve
               if was_off != 0: # two off-curve control points in a row means interpolate an on-curve midpoint
-                 {.emit: "stbtt_setvertex(&vertices[`num_vertices`++], STBTT_vcurve, (cx+x)>>1, (cy+y)>>1, cx, cy);".}
+                  stbtt_setvertex(vertices[num_vertices], STBTT_vcurve, (cx+x) shr 1, (cy+y) shr 1, cx, cy)
+                  inc num_vertices
               cx = x
               cy = y
               was_off = 1
            else:
               if was_off != 0:
-                 {.emit: "stbtt_setvertex(&vertices[`num_vertices`], STBTT_vcurve, x,y, cx, cy);".}
+                 stbtt_setvertex(vertices[num_vertices], STBTT_vcurve, x,y, cx, cy)
               else:
-                 {.emit: "stbtt_setvertex(&vertices[`num_vertices`], STBTT_vline, x,y,0,0);".}
+                 stbtt_setvertex(vertices[num_vertices], STBTT_vline, x,y,0,0)
               inc num_vertices
               was_off = 0
         inc i
@@ -1290,14 +1274,12 @@ proc stbtt_GetGlyphShape(info: stbtt_fontinfo, glyph_index: cint, pvertices: ptr
         let n = sqrt(mtx[2]*mtx[2] + mtx[3]*mtx[3])
 
         # Get indexed glyph.
-        var comp_verts: ptr stbtt_vertex
-        let comp_num_verts = stbtt_GetGlyphShape(info, gidx.cint, addr comp_verts)
+        var comp_verts = stbtt_GetGlyphShape(info, gidx.cint)
 
-        if comp_num_verts > 0:
+        if comp_verts.len > 0:
            # Transform vertices.
-           for i in 0 ..< comp_num_verts:
-              var v : ptr stbtt_vertex
-              {.emit:"v = &`comp_verts`[`i`];".}
+           for i in 0 ..< comp_verts.len:
+              var v = addr comp_verts[i]
               var x = v.x
               var y = v.y
 
@@ -1309,15 +1291,11 @@ proc stbtt_GetGlyphShape(info: stbtt_fontinfo, glyph_index: cint, pvertices: ptr
               v.cy = (n * (mtx[1] * x.cfloat + mtx[3] * y.cfloat + mtx[5])).stbtt_vertex_type
 
            # Append vertices.
-           let tmp = cast[ptr stbtt_vertex](alloc((num_vertices+comp_num_verts)*sizeof(stbtt_vertex)))
-           if num_vertices > 0: copyMem(tmp, vertices, num_vertices * sizeof(stbtt_vertex))
-           {.emit: """
-           STBTT_memcpy(tmp+`num_vertices`, `comp_verts`, `comp_num_verts`*sizeof(stbtt_vertex));
-           """.}
-           if not vertices.isNil: dealloc(vertices)
-           vertices = tmp;
-           if not comp_verts.isNil: dealloc(comp_verts)
-           num_vertices += comp_num_verts
+           if vertices.isNil:
+               vertices = comp_verts
+           else:
+               vertices.add(comp_verts)
+           num_vertices += comp_verts.len.cint
 
         # More components ?
         more = flags.cint and (1 shl 5)
@@ -1328,9 +1306,8 @@ proc stbtt_GetGlyphShape(info: stbtt_fontinfo, glyph_index: cint, pvertices: ptr
      # numberOfCounters == 0, do nothing
      discard
 
-  pvertices[] = vertices
-  return num_vertices
-{.pop.}
+  vertices.setLen(num_vertices)
+  return vertices
 
 proc stbtt_GetGlyphHMetrics*(info: stbtt_fontinfo, glyph_index: cint, advanceWidth, leftSideBearing: var cint) {.exportc.} =
     let numOfLongHorMetrics = ttUSHORT(info.data[], info.hhea + 34).int
@@ -1823,8 +1800,7 @@ void stbtt_FreeBitmap(unsigned char *bitmap, void *userdata)
 proc stbtt_GetGlyphBitmapSubpixel(info: stbtt_fontinfo, scale_x, scale_y, shift_x, shift_y: cfloat, glyph: cint, width, height, xoff, yoff: ptr cint): ptr uint8 {.exportc.} =
    var ix0,iy0,ix1,iy1 : cint
    var gbm: stbtt_bitmap
-   var vertices: ptr stbtt_vertex
-   let num_verts = stbtt_GetGlyphShape(info, glyph, addr vertices)
+   var vertices = stbtt_GetGlyphShape(info, glyph)
 
    var sx = scale_x
    var sy = scale_y
@@ -1850,9 +1826,9 @@ proc stbtt_GetGlyphBitmapSubpixel(info: stbtt_fontinfo, scale_x, scale_y, shift_
       gbm.pixels = cast[ptr uint8](alloc(gbm.w * gbm.h))
       if not gbm.pixels.isNil:
          gbm.stride = gbm.w
-         {.emit: "stbtt_Rasterize(&gbm, 0.35f, vertices, `num_verts`, sx, sy, `shift_x`, `shift_y`, ix0, iy0, 1, NULL);".}
+         stbtt_Rasterize(addr gbm, 0.35, vertices, sx, sy, shift_x, shift_y, ix0, iy0, 1)
 
-   if not vertices.isNil: dealloc(vertices)
+   #if not vertices.isNil: dealloc(vertices)
    result = gbm.pixels
 
 proc stbtt_GetGlyphBitmap*(info: stbtt_fontinfo, scale_x, scale_y: cfloat, glyph: cint, width, height, xoff, yoff: ptr cint): ptr uint8 =
@@ -1860,8 +1836,7 @@ proc stbtt_GetGlyphBitmap*(info: stbtt_fontinfo, scale_x, scale_y: cfloat, glyph
 
 proc stbtt_MakeGlyphBitmapSubpixel(info: stbtt_fontinfo, output: ptr uint8, out_w, out_h, out_stride: cint, scale_x, scale_y, shift_x, shift_y: cfloat, glyph: cint) {.exportc.} =
     var ix0, iy0: cint
-    var vertices: ptr stbtt_vertex
-    let num_verts = stbtt_GetGlyphShape(info, glyph, addr vertices)
+    var vertices = stbtt_GetGlyphShape(info, glyph)
     var gbm : stbtt_bitmap
 
     stbtt_GetGlyphBitmapBoxSubpixel(info, glyph, scale_x, scale_y, shift_x, shift_y, addr ix0, addr iy0, nil, nil);
@@ -1871,9 +1846,9 @@ proc stbtt_MakeGlyphBitmapSubpixel(info: stbtt_fontinfo, output: ptr uint8, out_
     gbm.stride = out_stride
 
     if gbm.w != 0 and gbm.h != 0:
-        {.emit: "stbtt_Rasterize(&gbm, 0.35f, `vertices`, `num_verts`, `scale_x`, `scale_y`, `shift_x`, `shift_y`, ix0, iy0, 1, info->userdata);".}
+        stbtt_Rasterize(addr gbm, 0.35, vertices, scale_x, scale_y, shift_x, shift_y, ix0, iy0, 1)
 
-    if not vertices.isNil: dealloc(vertices)
+    #if not vertices.isNil: dealloc(vertices)
 
 {.emit: """
 
