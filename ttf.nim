@@ -1,7 +1,9 @@
 
 import math
 
-proc malloc(size: int): pointer {.header:"<stdlib.h>".}
+proc STBTT_malloc(size: int, userdata: pointer): pointer {.exportc.} = alloc(size)
+proc STBTT_free(data: pointer, userdata: pointer) {.exportc.} =
+    if not data.isNil: dealloc(data)
 
 {.emit: """
 
@@ -388,13 +390,6 @@ int main(int arg, char **argv)
    #define STBTT_sqrt(x)      sqrt(x)
    #endif
 
-   // #define your own functions "STBTT_malloc" / "STBTT_free" to avoid malloc.h
-   #ifndef STBTT_malloc
-   #include <stdlib.h>
-   #define STBTT_malloc(x,u)  ((void)(u),malloc(x))
-   #define STBTT_free(x,u)    ((void)(u),free(x))
-   #endif
-
    #ifndef STBTT_assert
    #include <assert.h>
    #define STBTT_assert(x)    assert(x)
@@ -634,8 +629,7 @@ type stbtt_vertex {.exportc.} = object
 
 {.emit: """
 
-extern int stbtt_GetCodepointShape(const stbtt_fontinfo *info, int unicode_codepoint, stbtt_vertex **vertices);
-extern int stbtt_GetGlyphShape(const stbtt_fontinfo *info, int glyph_index, stbtt_vertex **vertices);
+extern int stbtt_GetGlyphShape(stbtt_fontinfo *info, int glyph_index, stbtt_vertex **vertices);
 // returns # of vertices and fills *vertices with the pointer to them
 //   these are expressed in "unscaled" coordinates
 //
@@ -683,11 +677,10 @@ extern void stbtt_MakeCodepointBitmapSubpixel(const stbtt_fontinfo *info, unsign
 // the following functions are equivalent to the above functions, but operate
 // on glyph indices instead of Unicode codepoints (for efficiency)
 extern unsigned char *stbtt_GetGlyphBitmap(const stbtt_fontinfo *info, float scale_x, float scale_y, int glyph, int *width, int *height, int *xoff, int *yoff);
-extern unsigned char *stbtt_GetGlyphBitmapSubpixel(const stbtt_fontinfo *info, float scale_x, float scale_y, float shift_x, float shift_y, int glyph, int *width, int *height, int *xoff, int *yoff);
+//extern unsigned char *stbtt_GetGlyphBitmapSubpixel(const stbtt_fontinfo *info, float scale_x, float scale_y, float shift_x, float shift_y, int glyph, int *width, int *height, int *xoff, int *yoff);
 """.}
 
 proc stbtt_MakeGlyphBitmap*(info: stbtt_fontinfo, output: ptr byte, out_w, out_h, out_stride: cint, scale_x, scale_y: cfloat, glyph: cint) {.importc.}
-proc stbtt_MakeGlyphBitmapSubpixel*(info: stbtt_fontinfo, output: ptr byte, out_w, out_h, out_stride: cint, scale_x, scale_y, shift_x, shift_y: cfloat, glyph: cint) {.importc.}
 proc stbtt_GetGlyphBitmapBox*(info: stbtt_fontinfo, glyph: cint, scale_x, scale_y: cfloat, ix0, iy0, ix1, iy1: var cint) {.importc.}
 proc stbtt_GetGlyphBitmapBoxSubpixel*(info: stbtt_fontinfo, glyph: cint, scale_x, scale_y, shift_x, shift_y: cfloat, ix0, iy0, ix1, iy1: var cint) {.importc.}
 
@@ -844,7 +837,9 @@ typedef int stbtt__test_oversample_pow2[(STBTT_MAX_OVERSAMPLE & (STBTT_MAX_OVERS
 {.push overflowChecks: off.}
 
 proc ttBYTE(p: font_type): uint8 {.exportc.} = p[0]
+proc ttBYTE(p: font_type, idx: int): uint8 = p[idx]
 proc ttCHAR(p: font_type): int8 {.exportc.} = cast[int8](p[0])
+proc ttCHAR(p: font_type, idx: int): int8 = cast[int8](p[idx])
 
 proc ttUSHORT(p: font_type): uint16 {.exportc.} = (p[0].uint16 * 256) + p[1].uint16
 proc ttUSHORT(p: font_type, idx: int): uint16 = (p[idx].uint16 * 256) + p[idx + 1].uint16
@@ -1046,7 +1041,7 @@ int N_RAW_NIMCALL stbtt_FindGlyphIndex(stbtt_fontinfo *info, int unicode_codepoi
 
 """.}
 
-proc stbtt_GetGlyphShape(info: stbtt_fontinfo, glyph_index: cint, pvertices: ptr ptr stbtt_vertex): cint {.importc.}
+proc stbtt_GetGlyphShape(info: stbtt_fontinfo, glyph_index: cint, pvertices: ptr ptr stbtt_vertex): cint {.exportc.}
 
 proc stbtt_GetCodepointShape*(info: stbtt_fontinfo, unicode_codepoint: cint, vertices: ptr ptr stbtt_vertex): cint =
     stbtt_GetGlyphShape(info, stbtt_FindGlyphIndex(info, unicode_codepoint), vertices)
@@ -1110,234 +1105,232 @@ proc stbtt_close_shape(vertices: ptr stbtt_vertex, num_vertices, was_off, start_
             {.emit: "stbtt_setvertex(&`vertices`[`result`], STBTT_vline,`sx`,`sy`,0,0);".}
         inc result
 
-{.emit: """
+{.push stacktrace: off.}
+proc stbtt_GetGlyphShape(info: stbtt_fontinfo, glyph_index: cint, pvertices: ptr ptr stbtt_vertex): cint =
+  # returns # of vertices and fills *vertices with the pointer to them
+  #   these are expressed in "unscaled" coordinates
+  #
+  # The shape is a series of countours. Each one starts with
+  # a STBTT_moveto, then consists of a series of mixed
+  # STBTT_lineto and STBTT_curveto segments. A lineto
+  # draws a line from previous endpoint to its x,y; a curveto
+  # draws a quadratic bezier from previous endpoint to
+  # its x,y, using cx,cy as the bezier control point.
 
-int stbtt_GetGlyphShape(const stbtt_fontinfo *info, int glyph_index, stbtt_vertex **pvertices)
-{
-   stbtt_int16 numberOfContours;
-   stbtt_uint8 *endPtsOfContours;
-   stbtt_uint8 *data = info->data;
-   stbtt_vertex *vertices=0;
-   int num_vertices=0;
-   int g = stbtt_GetGlyfOffset(info, glyph_index);
+  pvertices[] = nil
 
-   *pvertices = NULL;
+  let g = stbtt_GetGlyfOffset(info, glyph_index)
+  if g < 0: return 0
 
-   if (g < 0) return 0;
+  let numberOfContours = ttSHORT(info.data[], g)
+  var num_vertices: cint = 0
 
-   numberOfContours = ttSHORT(data + g);
+  {.emit: """
+  stbtt_uint8 *data = `info`->data;
+  """.}
+  var vertices: ptr stbtt_vertex
 
-   if (numberOfContours > 0) {
-      stbtt_uint8 flags=0,flagcount;
-      stbtt_int32 ins, i,j=0,m,n, next_move, was_off=0, off, start_off=0;
-      stbtt_int32 x,y,cx,cy,sx,sy, scx,scy;
-      stbtt_uint8 *points;
-      endPtsOfContours = (data + g + 10);
-      ins = ttUSHORT(data + g + 10 + numberOfContours * 2);
-      points = data + g + 10 + numberOfContours * 2 + 2 + ins;
+  if numberOfContours > 0:
+     var flags = 0'u8
+     var flagcount = 0'u8
+     let ins: int32 = ttUSHORT(info.data[], g + 10 + numberOfContours * 2).int32
+     let endPtsOfContours = g + 10
+     var points = g + 10 + numberOfContours * 2 + 2 + ins
+     let n : int32 = (1'u16 + ttUSHORT(info.data[], endPtsOfContours + numberOfContours * 2 - 2)).int32
+     let m : int32 = n + 2 * numberOfContours # a loose bound on how many vertices we might need
+     vertices = cast[ptr stbtt_vertex](alloc(m * sizeof(stbtt_vertex)))
 
-      n = 1+ttUSHORT(endPtsOfContours + numberOfContours*2-2);
+     # in first pass, we load uninterpreted data into the allocated array
+     # above, shifted to the end of the array so we won't overwrite it when
+     # we create our final data starting from the front
 
-      m = n + 2*numberOfContours;  // a loose bound on how many vertices we might need
-      vertices = (stbtt_vertex *) STBTT_malloc(m * sizeof(vertices[0]), info->userdata);
-      if (vertices == 0)
-         return 0;
+     let off = m - n # starting offset for uninterpreted data, regardless of how m ends up being calculated
 
-      next_move = 0;
-      flagcount=0;
+     # first load flags
 
-      // in first pass, we load uninterpreted data into the allocated array
-      // above, shifted to the end of the array so we won't overwrite it when
-      // we create our final data starting from the front
+     for i in 0 ..< n:
+        if flagcount == 0:
+           flags = ttBYTE(info.data[], points)
+           inc points
+           if (flags and 8) != 0:
+               flagcount = ttBYTE(info.data[], points)
+               inc points
+        else:
+           dec flagcount
+        {.emit:"vertices[off+`i`].type = flags;".}
 
-      off = m - n; // starting offset for uninterpreted data, regardless of how m ends up being calculated
+     # now load x coordinates
+     var x: int32
+     for i in 0 ..< n:
+        {.emit: "flags = vertices[off+`i`].type;".}
+        if (flags and 2) != 0:
+           let dx : int16 = ttBYTE(info.data[], points).int16
+           inc points
+           x += (if (flags and 16) != 0: dx else: -dx) # ???
+        else:
+           if (flags and 16) == 0:
+              x = x + ttSHORT(info.data[], points)
+              points += 2
+        {.emit: "vertices[off+`i`].x = (stbtt_int16) x;".}
 
-      // first load flags
+     # now load y coordinates
+     var y: int32
 
-      for (i=0; i < n; ++i) {
-         if (flagcount == 0) {
-            flags = *points++;
-            if (flags & 8)
-               flagcount = *points++;
-         } else
-            --flagcount;
-         vertices[off+i].type = flags;
-      }
+     for i in 0 ..< n:
+        {.emit: "flags = vertices[off+`i`].type;".}
+        if (flags and 4) != 0:
+           let dy = ttBYTE(info.data[], points).int16
+           inc points
+           y += (if (flags and 32) != 0: dy else: -dy) # ???
+        else:
+           if (flags and 32) == 0:
+              y += ttSHORT(info.data[], points)
+              points += 2
+        {.emit: "vertices[off+`i`].y = (stbtt_int16) y;".}
 
-      // now load x coordinates
-      x=0;
-      for (i=0; i < n; ++i) {
-         flags = vertices[off+i].type;
-         if (flags & 2) {
-            stbtt_int16 dx = *points++;
-            x += (flags & 16) ? dx : -dx; // ???
-         } else {
-            if (!(flags & 16)) {
-               x = x + (stbtt_int16) (points[0]*256 + points[1]);
-               points += 2;
-            }
-         }
-         vertices[off+i].x = (stbtt_int16) x;
-      }
+     # now convert them to our format
+     var cx,cy,sx,sy, scx,scy: int32
+     var j : int32
+     var was_off, start_off: int32
+     var next_move : int32
+     var i = 0
+     while i < n:
+        {.emit: """
+        flags = vertices[off+`i`].type;
+        x     = (stbtt_int16) vertices[off+`i`].x;
+        y     = (stbtt_int16) vertices[off+`i`].y;
+        """.}
 
-      // now load y coordinates
-      y=0;
-      for (i=0; i < n; ++i) {
-         flags = vertices[off+i].type;
-         if (flags & 4) {
-            stbtt_int16 dy = *points++;
-            y += (flags & 32) ? dy : -dy; // ???
-         } else {
-            if (!(flags & 32)) {
-               y = y + (stbtt_int16) (points[0]*256 + points[1]);
-               points += 2;
-            }
-         }
-         vertices[off+i].y = (stbtt_int16) y;
-      }
-
-      // now convert them to our format
-      num_vertices=0;
-      sx = sy = cx = cy = scx = scy = 0;
-      for (i=0; i < n; ++i) {
-         flags = vertices[off+i].type;
-         x     = (stbtt_int16) vertices[off+i].x;
-         y     = (stbtt_int16) vertices[off+i].y;
-
-         if (next_move == i) {
-            if (i != 0)
+        if next_move == i:
+           if i != 0:
                num_vertices = stbtt_close_shape(vertices, num_vertices, was_off, start_off, sx,sy,scx,scy,cx,cy);
+           # now start the new one
+           start_off = if (flags and 1) == 0: 1 else: 0
+           if start_off != 0:
+              # if we start off with an off-curve point, then when we need to find a point on the curve
+              # where we can start, and we need to save some state for when we wraparound.
+              scx = x
+              scy = y
+              {.emit: """
+              if (!(vertices[off+`i`+1].type & 1)) {
+                 // next point is also a curve point, so interpolate an on-point curve
+                 sx = (x + (stbtt_int32) vertices[off+`i`+1].x) >> 1;
+                 sy = (y + (stbtt_int32) vertices[off+`i`+1].y) >> 1;
+              } else {
+                 // otherwise just use the next point as our start point
+                 sx = (stbtt_int32) vertices[off+`i`+1].x;
+                 sy = (stbtt_int32) vertices[off+`i`+1].y;
+                 ++`i`; // we're using point i+1 as the starting point, so skip it
+              }
+              """.}
+           else:
+              sx = x
+              sy = y
+           {.emit: "stbtt_setvertex(&vertices[`num_vertices`], STBTT_vmove,sx,sy,0,0);".}
+           inc num_vertices
+           was_off = 0
+           next_move = (1'u16 + ttUSHORT(info.data[], endPtsOfContours + j * 2)).int32
+           inc j
+        else:
+           if (flags and 1) == 0: # if it's a curve
+              if was_off != 0: # two off-curve control points in a row means interpolate an on-curve midpoint
+                 {.emit: "stbtt_setvertex(&vertices[`num_vertices`++], STBTT_vcurve, (cx+x)>>1, (cy+y)>>1, cx, cy);".}
+              cx = x
+              cy = y
+              was_off = 1
+           else:
+              if was_off != 0:
+                 {.emit: "stbtt_setvertex(&vertices[`num_vertices`], STBTT_vcurve, x,y, cx, cy);".}
+              else:
+                 {.emit: "stbtt_setvertex(&vertices[`num_vertices`], STBTT_vline, x,y,0,0);".}
+              inc num_vertices
+              was_off = 0
+        inc i
+     num_vertices = stbtt_close_shape(vertices, num_vertices, was_off, start_off, sx,sy,scx,scy,cx,cy);
+  elif numberOfContours == -1:
+     # Compound shapes.
+     var more : cint = 1
+     var comp = g + 10
+     while more != 0:
+        var mtx: array[6, cfloat] = [1.cfloat, 0, 0, 1, 0, 0]
+        var flags = ttSHORT(info.data[], comp).uint16
+        comp += 2
+        var gidx = ttSHORT(info.data[], comp).uint16
+        comp += 2
 
-            // now start the new one
-            start_off = !(flags & 1);
-            if (start_off) {
-               // if we start off with an off-curve point, then when we need to find a point on the curve
-               // where we can start, and we need to save some state for when we wraparound.
-               scx = x;
-               scy = y;
-               if (!(vertices[off+i+1].type & 1)) {
-                  // next point is also a curve point, so interpolate an on-point curve
-                  sx = (x + (stbtt_int32) vertices[off+i+1].x) >> 1;
-                  sy = (y + (stbtt_int32) vertices[off+i+1].y) >> 1;
-               } else {
-                  // otherwise just use the next point as our start point
-                  sx = (stbtt_int32) vertices[off+i+1].x;
-                  sy = (stbtt_int32) vertices[off+i+1].y;
-                  ++i; // we're using point i+1 as the starting point, so skip it
-               }
-            } else {
-               sx = x;
-               sy = y;
-            }
-            stbtt_setvertex(&vertices[num_vertices++], STBTT_vmove,sx,sy,0,0);
-            was_off = 0;
-            next_move = 1 + ttUSHORT(endPtsOfContours+j*2);
-            ++j;
-         } else {
-            if (!(flags & 1)) { // if it's a curve
-               if (was_off) // two off-curve control points in a row means interpolate an on-curve midpoint
-                  stbtt_setvertex(&vertices[num_vertices++], STBTT_vcurve, (cx+x)>>1, (cy+y)>>1, cx, cy);
-               cx = x;
-               cy = y;
-               was_off = 1;
-            } else {
-               if (was_off)
-                  stbtt_setvertex(&vertices[num_vertices++], STBTT_vcurve, x,y, cx, cy);
-               else
-                  stbtt_setvertex(&vertices[num_vertices++], STBTT_vline, x,y,0,0);
-               was_off = 0;
-            }
-         }
-      }
-      num_vertices = stbtt_close_shape(vertices, num_vertices, was_off, start_off, sx,sy,scx,scy,cx,cy);
-   } else if (numberOfContours == -1) {
-      // Compound shapes.
-      int more = 1;
-      stbtt_uint8 *comp = data + g + 10;
-      num_vertices = 0;
-      vertices = 0;
-      while (more) {
-         stbtt_uint16 flags, gidx;
-         int comp_num_verts = 0, i;
-         stbtt_vertex *comp_verts = 0, *tmp = 0;
-         float mtx[6] = {1,0,0,1,0,0}, m, n;
+        if (flags and 2) != 0: # XY values
+           if (flags and 1) != 0: # shorts
+              mtx[4] = ttSHORT(info.data[], comp).cfloat; comp+=2;
+              mtx[5] = ttSHORT(info.data[], comp).cfloat; comp+=2;
+           else:
+              mtx[4] = ttCHAR(info.data[], comp).cfloat; comp+=1;
+              mtx[5] = ttCHAR(info.data[], comp).cfloat; comp+=1;
+        else:
+           # @TODO handle matching point
+           assert(false)
 
-         flags = ttSHORT(comp); comp+=2;
-         gidx = ttSHORT(comp); comp+=2;
+        if (flags and (1 shl 3)) != 0: # WE_HAVE_A_SCALE
+           mtx[0] = ttSHORT(info.data[], comp).cfloat/16384.0; comp+=2;
+           mtx[3] = mtx[0]
+           mtx[1] = 0
+           mtx[2] = 0
+        elif (flags and (1 shl 6)) != 0: # WE_HAVE_AN_X_AND_YSCALE
+           mtx[0] = ttSHORT(info.data[], comp).cfloat/16384.0; comp+=2;
+           mtx[1] = 0
+           mtx[2] = 0
+           mtx[3] = ttSHORT(info.data[], comp).cfloat/16384.0f; comp+=2;
+        elif (flags and (1 shl 7)) != 0: # WE_HAVE_A_TWO_BY_TWO
+           mtx[0] = ttSHORT(info.data[], comp).cfloat/16384.0; comp+=2;
+           mtx[1] = ttSHORT(info.data[], comp).cfloat/16384.0; comp+=2;
+           mtx[2] = ttSHORT(info.data[], comp).cfloat/16384.0; comp+=2;
+           mtx[3] = ttSHORT(info.data[], comp).cfloat/16384.0; comp+=2;
 
-         if (flags & 2) { // XY values
-            if (flags & 1) { // shorts
-               mtx[4] = ttSHORT(comp); comp+=2;
-               mtx[5] = ttSHORT(comp); comp+=2;
-            } else {
-               mtx[4] = ttCHAR(comp); comp+=1;
-               mtx[5] = ttCHAR(comp); comp+=1;
-            }
-         }
-         else {
-            // @TODO handle matching point
-            STBTT_assert(0);
-         }
-         if (flags & (1<<3)) { // WE_HAVE_A_SCALE
-            mtx[0] = mtx[3] = ttSHORT(comp)/16384.0f; comp+=2;
-            mtx[1] = mtx[2] = 0;
-         } else if (flags & (1<<6)) { // WE_HAVE_AN_X_AND_YSCALE
-            mtx[0] = ttSHORT(comp)/16384.0f; comp+=2;
-            mtx[1] = mtx[2] = 0;
-            mtx[3] = ttSHORT(comp)/16384.0f; comp+=2;
-         } else if (flags & (1<<7)) { // WE_HAVE_A_TWO_BY_TWO
-            mtx[0] = ttSHORT(comp)/16384.0f; comp+=2;
-            mtx[1] = ttSHORT(comp)/16384.0f; comp+=2;
-            mtx[2] = ttSHORT(comp)/16384.0f; comp+=2;
-            mtx[3] = ttSHORT(comp)/16384.0f; comp+=2;
-         }
+        # Find transformation scales.
+        let m = sqrt(mtx[0]*mtx[0] + mtx[1]*mtx[1])
+        let n = sqrt(mtx[2]*mtx[2] + mtx[3]*mtx[3])
 
-         // Find transformation scales.
-         m = (float) STBTT_sqrt(mtx[0]*mtx[0] + mtx[1]*mtx[1]);
-         n = (float) STBTT_sqrt(mtx[2]*mtx[2] + mtx[3]*mtx[3]);
+        # Get indexed glyph.
+        var comp_verts: ptr stbtt_vertex
+        let comp_num_verts = stbtt_GetGlyphShape(info, gidx.cint, addr comp_verts)
 
-         // Get indexed glyph.
-         comp_num_verts = stbtt_GetGlyphShape(info, gidx, &comp_verts);
-         if (comp_num_verts > 0) {
-            // Transform vertices.
-            for (i = 0; i < comp_num_verts; ++i) {
-               stbtt_vertex* v = &comp_verts[i];
-               stbtt_vertex_type x,y;
-               x=v->x; y=v->y;
-               v->x = (stbtt_vertex_type)(m * (mtx[0]*x + mtx[2]*y + mtx[4]));
-               v->y = (stbtt_vertex_type)(n * (mtx[1]*x + mtx[3]*y + mtx[5]));
-               x=v->cx; y=v->cy;
-               v->cx = (stbtt_vertex_type)(m * (mtx[0]*x + mtx[2]*y + mtx[4]));
-               v->cy = (stbtt_vertex_type)(n * (mtx[1]*x + mtx[3]*y + mtx[5]));
-            }
-            // Append vertices.
-            tmp = (stbtt_vertex*)STBTT_malloc((num_vertices+comp_num_verts)*sizeof(stbtt_vertex), info->userdata);
-            if (!tmp) {
-               if (vertices) STBTT_free(vertices, info->userdata);
-               if (comp_verts) STBTT_free(comp_verts, info->userdata);
-               return 0;
-            }
-            if (num_vertices > 0) STBTT_memcpy(tmp, vertices, num_vertices*sizeof(stbtt_vertex));
-            STBTT_memcpy(tmp+num_vertices, comp_verts, comp_num_verts*sizeof(stbtt_vertex));
-            if (vertices) STBTT_free(vertices, info->userdata);
-            vertices = tmp;
-            STBTT_free(comp_verts, info->userdata);
-            num_vertices += comp_num_verts;
-         }
-         // More components ?
-         more = flags & (1<<5);
-      }
-   } else if (numberOfContours < 0) {
-      // @TODO other compound variations?
-      STBTT_assert(0);
-   } else {
-      // numberOfCounters == 0, do nothing
-   }
+        if comp_num_verts > 0:
+           # Transform vertices.
+           for i in 0 ..< comp_num_verts:
+              var v : ptr stbtt_vertex
+              {.emit:"v = &`comp_verts`[`i`];".}
+              var x = v.x
+              var y = v.y
 
-   *pvertices = vertices;
-   return num_vertices;
-}
-""".}
+              v.x = (m * (mtx[0]* x.cfloat + mtx[2]* y.cfloat + mtx[4])).stbtt_vertex_type
+              v.y = (n * (mtx[1]* x.cfloat + mtx[3]* y.cfloat + mtx[5])).stbtt_vertex_type
+              x = v.cx
+              y = v.cy
+              v.cx = (m * (mtx[0] * x.cfloat + mtx[2] * y.cfloat + mtx[4])).stbtt_vertex_type
+              v.cy = (n * (mtx[1] * x.cfloat + mtx[3] * y.cfloat + mtx[5])).stbtt_vertex_type
+
+           # Append vertices.
+           let tmp = cast[ptr stbtt_vertex](alloc((num_vertices+comp_num_verts)*sizeof(stbtt_vertex)))
+           if num_vertices > 0: copyMem(tmp, vertices, num_vertices * sizeof(stbtt_vertex))
+           {.emit: """
+           STBTT_memcpy(tmp+`num_vertices`, `comp_verts`, `comp_num_verts`*sizeof(stbtt_vertex));
+           """.}
+           if not vertices.isNil: dealloc(vertices)
+           vertices = tmp;
+           if not comp_verts.isNil: dealloc(comp_verts)
+           num_vertices += comp_num_verts
+
+        # More components ?
+        more = flags.cint and (1 shl 5)
+  elif numberOfContours < 0:
+     # @TODO other compound variations?
+     assert(false)
+  else:
+     # numberOfCounters == 0, do nothing
+     discard
+
+  pvertices[] = vertices
+  return num_vertices
+{.pop.}
 
 proc stbtt_GetGlyphHMetrics*(info: stbtt_fontinfo, glyph_index: cint, advanceWidth, leftSideBearing: var cint) {.exportc.} =
     let numOfLongHorMetrics = ttUSHORT(info.data[], info.hhea + 34).int
@@ -1486,7 +1479,7 @@ const FIX = 1 shl FIXSHIFT
 const FIXMASK = FIX - 1
 
 proc new_active(e: ptr stbtt_edge, off_x: cint, start_point: cfloat, userdata: pointer): ptr stbtt_active_edge {.exportc.} =
-    result = cast[ptr stbtt_active_edge](malloc(sizeof(stbtt_active_edge))) # @TODO: make a pool of these!!!
+    result = cast[ptr stbtt_active_edge](alloc(sizeof(stbtt_active_edge))) # @TODO: make a pool of these!!!
     let dxdy = (e.x1 - e.x0) / (e.y1 - e.y0)
     assert(e.y0 <= start_point)
     # round dx down to avoid going too far
@@ -1741,7 +1734,7 @@ proc stbtt_tesselate_curve(points: var openarray[stbtt_point], num_points: var c
       num_points += 1
 
 proc toCArray[T](s: seq[T]): ptr T =
-    result = cast[ptr T](malloc(s.len * sizeof(T)))
+    result = cast[ptr T](alloc(s.len * sizeof(T)))
     var p = cast[ptr array[999999, T]](result)
     for i, v in s:
         p[i] = v
@@ -1760,7 +1753,7 @@ proc stbtt_FlattenCurves(vertices: openarray[stbtt_vertex], objspace_flatness: c
 
     num_contours = n
     if n == 0: return
-    contour_lengths = cast[ptr cint](malloc(num_contours * sizeof(cint)))
+    contour_lengths = cast[ptr cint](alloc(num_contours * sizeof(cint)))
 
     var contour_lengths_arr = cast[ptr array[99999, cint]](contour_lengths)
 
@@ -1808,15 +1801,15 @@ proc stbtt_FlattenCurves(vertices: openarray[stbtt_vertex], objspace_flatness: c
 
     result = windings.toCArray()
 
-proc stbtt_Rasterize(result: ptr stbtt_bitmap, flatness_in_pixels: cfloat, vertices: openarray[stbtt_vertex], scale_x, scale_y, shift_x, shift_y: cfloat, x_off, y_off, invert: cint, userdata: pointer) {.exportc.} =
+proc stbtt_Rasterize(result: ptr stbtt_bitmap, flatness_in_pixels: cfloat, vertices: openarray[stbtt_vertex], scale_x, scale_y, shift_x, shift_y: cfloat, x_off, y_off, invert: cint, userdata: pointer = nil) {.exportc.} =
     let scale = min(scale_x, scale_y)
     var winding_count: cint
     var winding_lengths: ptr cint
     let windings = stbtt_FlattenCurves(vertices, cfloat(flatness_in_pixels / scale), winding_lengths, winding_count);
     if not windings.isNil:
         stbtt_rasterize(result, windings, winding_lengths, winding_count, scale_x, scale_y, shift_x, shift_y, x_off, y_off, invert, userdata)
-        #STBTT_free(winding_lengths, userdata)
-        #STBTT_free(windings, userdata)
+        if not winding_lengths.isNil: dealloc(winding_lengths)
+        if not windings.isNil: dealloc(windings)
 
 {.emit: """
 
@@ -1825,66 +1818,64 @@ void stbtt_FreeBitmap(unsigned char *bitmap, void *userdata)
    STBTT_free(bitmap, userdata);
 }
 
-unsigned char *stbtt_GetGlyphBitmapSubpixel(const stbtt_fontinfo *info, float scale_x, float scale_y, float shift_x, float shift_y, int glyph, int *width, int *height, int *xoff, int *yoff)
-{
-   int ix0,iy0,ix1,iy1;
-   stbtt_bitmap gbm;
-   stbtt_vertex *vertices;
-   int num_verts = stbtt_GetGlyphShape(info, glyph, &vertices);
+""".}
 
-   if (scale_x == 0) scale_x = scale_y;
-   if (scale_y == 0) {
-      if (scale_x == 0) return NULL;
-      scale_y = scale_x;
-   }
+proc stbtt_GetGlyphBitmapSubpixel(info: stbtt_fontinfo, scale_x, scale_y, shift_x, shift_y: cfloat, glyph: cint, width, height, xoff, yoff: ptr cint): ptr uint8 {.exportc.} =
+   var ix0,iy0,ix1,iy1 : cint
+   var gbm: stbtt_bitmap
+   var vertices: ptr stbtt_vertex
+   let num_verts = stbtt_GetGlyphShape(info, glyph, addr vertices)
 
-   stbtt_GetGlyphBitmapBoxSubpixel(info, glyph, scale_x, scale_y, shift_x, shift_y, &ix0,&iy0,&ix1,&iy1);
+   var sx = scale_x
+   var sy = scale_y
 
-   // now we get the size
-   gbm.w = (ix1 - ix0);
-   gbm.h = (iy1 - iy0);
-   gbm.pixels = NULL; // in case we error
+   if sx == 0: sx = sy
+   if sy == 0:
+      if sx == 0: return nil
+      sy = sx
 
-   if (width ) *width  = gbm.w;
-   if (height) *height = gbm.h;
-   if (xoff  ) *xoff   = ix0;
-   if (yoff  ) *yoff   = iy0;
+   stbtt_GetGlyphBitmapBoxSubpixel(info, glyph, sx, sy, shift_x, shift_y, addr ix0, addr iy0, addr ix1, addr iy1)
 
-   if (gbm.w && gbm.h) {
-      gbm.pixels = (unsigned char *) STBTT_malloc(gbm.w * gbm.h, info->userdata);
-      if (gbm.pixels) {
-         gbm.stride = gbm.w;
+   # now we get the size
+   gbm.w = ix1 - ix0
+   gbm.h = iy1 - iy0
+   gbm.pixels = nil # in case we error
 
-         stbtt_Rasterize(&gbm, 0.35f, vertices, num_verts, scale_x, scale_y, shift_x, shift_y, ix0, iy0, 1, info->userdata);
-      }
-   }
-   STBTT_free(vertices, info->userdata);
-   return gbm.pixels;
-}
+   if not width.isNil: width[] = gbm.w
+   if not height.isNil: height[] = gbm.h
+   if not xoff.isNil: xoff[] = ix0
+   if not yoff.isNil: yoff[] = iy0
 
-unsigned char *stbtt_GetGlyphBitmap(const stbtt_fontinfo *info, float scale_x, float scale_y, int glyph, int *width, int *height, int *xoff, int *yoff)
-{
-   return stbtt_GetGlyphBitmapSubpixel(info, scale_x, scale_y, 0.0f, 0.0f, glyph, width, height, xoff, yoff);
-}
+   if gbm.w != 0 and gbm.h != 0:
+      gbm.pixels = cast[ptr uint8](alloc(gbm.w * gbm.h))
+      if not gbm.pixels.isNil:
+         gbm.stride = gbm.w
+         {.emit: "stbtt_Rasterize(&gbm, 0.35f, vertices, `num_verts`, sx, sy, `shift_x`, `shift_y`, ix0, iy0, 1, NULL);".}
 
-void stbtt_MakeGlyphBitmapSubpixel(const stbtt_fontinfo *info, unsigned char *output, int out_w, int out_h, int out_stride, float scale_x, float scale_y, float shift_x, float shift_y, int glyph)
-{
-   int ix0,iy0;
-   stbtt_vertex *vertices;
-   int num_verts = stbtt_GetGlyphShape(info, glyph, &vertices);
-   stbtt_bitmap gbm;
+   if not vertices.isNil: dealloc(vertices)
+   result = gbm.pixels
 
-   stbtt_GetGlyphBitmapBoxSubpixel(info, glyph, scale_x, scale_y, shift_x, shift_y, &ix0,&iy0,0,0);
-   gbm.pixels = output;
-   gbm.w = out_w;
-   gbm.h = out_h;
-   gbm.stride = out_stride;
+proc stbtt_GetGlyphBitmap*(info: stbtt_fontinfo, scale_x, scale_y: cfloat, glyph: cint, width, height, xoff, yoff: ptr cint): ptr uint8 =
+    return stbtt_GetGlyphBitmapSubpixel(info, scale_x, scale_y, 0.0, 0.0, glyph, width, height, xoff, yoff)
 
-   if (gbm.w && gbm.h)
-      stbtt_Rasterize(&gbm, 0.35f, vertices, num_verts, scale_x, scale_y, shift_x, shift_y, ix0,iy0, 1, info->userdata);
+proc stbtt_MakeGlyphBitmapSubpixel(info: stbtt_fontinfo, output: ptr uint8, out_w, out_h, out_stride: cint, scale_x, scale_y, shift_x, shift_y: cfloat, glyph: cint) {.exportc.} =
+    var ix0, iy0: cint
+    var vertices: ptr stbtt_vertex
+    let num_verts = stbtt_GetGlyphShape(info, glyph, addr vertices)
+    var gbm : stbtt_bitmap
 
-   STBTT_free(vertices, info->userdata);
-}
+    stbtt_GetGlyphBitmapBoxSubpixel(info, glyph, scale_x, scale_y, shift_x, shift_y, addr ix0, addr iy0, nil, nil);
+    gbm.pixels = output
+    gbm.w = out_w
+    gbm.h = out_h
+    gbm.stride = out_stride
+
+    if gbm.w != 0 and gbm.h != 0:
+        {.emit: "stbtt_Rasterize(&gbm, 0.35f, `vertices`, `num_verts`, `scale_x`, `scale_y`, `shift_x`, `shift_y`, ix0, iy0, 1, info->userdata);".}
+
+    if not vertices.isNil: dealloc(vertices)
+
+{.emit: """
 
 void N_RAW_NIMCALL stbtt_MakeGlyphBitmap(const stbtt_fontinfo *info, unsigned char *output, int out_w, int out_h, int out_stride, float scale_x, float scale_y, int glyph)
 {
