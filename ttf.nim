@@ -595,24 +595,11 @@ proc stbtt_FindGlyphIndex*(info: stbtt_fontinfo, unicode_codepoint: cint): cint 
 # CHARACTER PROPERTIES
 #
 
-{.emit: """
-
-//////////////////////////////////////////////////////////////////////////////
-//
-// GLYPH SHAPES (you probably don't need these, but they have to go before
-// the bitmaps for C declaration-order reasons)
-//
-
-enum
-{
-    STBTT_vmove = 1,
-    STBTT_vline,
-    STBTT_vcurve
-};
-
-typedef short stbtt_vertex_type;
-
-""".}
+################################################################################
+#
+# GLYPH SHAPES (you probably don't need these, but they have to go before
+# the bitmaps for C declaration-order reasons)
+#
 
 type STBTT_type {.exportc.} = enum
     STBTT_vmove = 1
@@ -666,7 +653,10 @@ extern void stbtt_MakeCodepointBitmapSubpixel(const stbtt_fontinfo *info, unsign
 
 // the following functions are equivalent to the above functions, but operate
 // on glyph indices instead of Unicode codepoints (for efficiency)
-extern unsigned char *stbtt_GetGlyphBitmap(const stbtt_fontinfo *info, float scale_x, float scale_y, int glyph, int *width, int *height, int *xoff, int *yoff);
+//extern unsigned char *stbtt_
+
+
+//Bitmap(const stbtt_fontinfo *info, float scale_x, float scale_y, int glyph, int *width, int *height, int *xoff, int *yoff);
 //extern unsigned char *stbtt_GetGlyphBitmapSubpixel(const stbtt_fontinfo *info, float scale_x, float scale_y, float shift_x, float shift_y, int glyph, int *width, int *height, int *xoff, int *yoff);
 """.}
 
@@ -686,9 +676,8 @@ typedef struct
    int w,h,stride;
    unsigned char *pixels;
 } stbtt_bitmap;
-
-extern void stbtt_Rasterize(stbtt_bitmap *result, float flatness_in_pixels, stbtt_vertex *vertices, int num_verts, float scale_x, float scale_y, float shift_x, float shift_y, int x_off, int y_off, int invert, void *userdata);
 */
+
 //////////////////////////////////////////////////////////////////////////////
 //
 // Finding the right font...
@@ -1038,10 +1027,10 @@ proc stbtt_GetCodepointShape*(info: stbtt_fontinfo, unicode_codepoint: cint): se
 
 proc stbtt_setvertex(v: var stbtt_vertex, t: STBTT_type, x, y, cx, cy: int32) {.exportc.} =
     v.`type` = t
-    v.x = x.int16
-    v.y = y.int16
-    v.cx = cx.int16
-    v.cy = cy.int16
+    v.x = cast[int16](x)
+    v.y = cast[int16](y)
+    v.cx = cast[int16](cx)
+    v.cy = cast[int16](cy)
 
 proc stbtt_GetGlyfOffset(info: stbtt_fontinfo, glyph_index: cint): cint {.exportc.} =
     if glyph_index >= info.numGlyphs: return -1 # glyph index out of range
@@ -1145,7 +1134,7 @@ proc stbtt_GetGlyphShape(info: stbtt_fontinfo, glyph_index: cint): seq[stbtt_ver
                inc points
         else:
            dec flagcount
-        vertices[off+i].`type` = flags.STBTT_type
+        vertices[off+i].`type` = cast[STBTT_type](flags)
 
      # now load x coordinates
      var x: int32
@@ -1637,56 +1626,54 @@ static int stbtt__edge_compare(const void *p, const void *q)
 type stbtt_point {.exportc.} = object
     x, y: cfloat
 
+proc stbtt_rasterize(result: var stbtt_bitmap, pts: ptr stbtt_point, wcount: ptr cint, windings: cint, scale_x, scale_y, shift_x, shift_y: cfloat, off_x, off_y, invert: cint, userdata: pointer) {.exportc.} =
+    let y_scale_inv = if invert != 0: -scale_y else: scale_y
+    let vsubsample : cint = if result.h < 8: 15 else: 5
+    # vsubsample should divide 255 evenly; otherwise we won't reach full opacity
 
-proc stbtt_rasterize(result: ptr stbtt_bitmap, pts: ptr stbtt_point, wcount: ptr cint, windings: cint, scale_x, scale_y, shift_x, shift_y: cfloat, off_x, off_y, invert: cint, userdata: pointer) {.exportc.} =
-   {.emit: """
-   float y_scale_inv = invert ? -`scale_y` : `scale_y`;
-   stbtt_edge *e;
-   int n,i,j,k,m;
-   int vsubsample = `result`->h < 8 ? 15 : 5;
-   // vsubsample should divide 255 evenly; otherwise we won't reach full opacity
+    # now we have to blow out the windings into explicit edge lists
 
-   // now we have to blow out the windings into explicit edge lists
-   n = 0;
-   for (i=0; i < `windings`; ++i)
-      n += `wcount`[i];
+    {.emit: """
+    int n = 0;
+    for (int i=0; i < `windings`; ++i)
+        n += `wcount`[i];
 
-   e = (stbtt_edge *) STBTT_malloc(sizeof(*e) * (n+1), userdata); // add an extra one as a sentinel
-   if (e == 0) return;
-   n = 0;
+    stbtt_edge *e = (stbtt_edge *) STBTT_malloc(sizeof(*e) * (n+1), userdata); // add an extra one as a sentinel
+    if (e == 0) return;
+    n = 0;
 
-   m=0;
-   for (i=0; i < `windings`; ++i) {
-      stbtt_point *p = `pts` + m;
-      m += `wcount`[i];
-      j = `wcount`[i]-1;
-      for (k=0; k < `wcount`[i]; j=k++) {
-         int a=k,b=j;
-         // skip the edge if horizontal
-         if (p[j].y == p[k].y)
-            continue;
-         // add edge from j to k to the list
-         e[n].invert = 0;
-         if (`invert` ? p[j].y > p[k].y : p[j].y < p[k].y) {
-            e[n].invert = 1;
-            a=j,b=k;
-         }
-         e[n].x0 = p[a].x * `scale_x` + `shift_x`;
-         e[n].y0 = (p[a].y * y_scale_inv + `shift_y`) * vsubsample;
-         e[n].x1 = p[b].x * `scale_x` + `shift_x`;
-         e[n].y1 = (p[b].y * y_scale_inv + `shift_y`) * vsubsample;
-         ++n;
-      }
-   }
+    int m=0;
+    for (int i=0; i < `windings`; ++i) {
+        stbtt_point *p = `pts` + m;
+        m += `wcount`[i];
+        int j = `wcount`[i]-1;
+        for (int k=0; k < `wcount`[i]; j=k++) {
+            int a=k,b=j;
+            // skip the edge if horizontal
+            if (p[j].y == p[k].y)
+                continue;
+            // add edge from j to k to the list
+            e[n].invert = 0;
+            if (`invert` ? p[j].y > p[k].y : p[j].y < p[k].y) {
+                e[n].invert = 1;
+                a=j,b=k;
+            }
+            e[n].x0 = p[a].x * `scale_x` + `shift_x`;
+            e[n].y0 = (p[a].y * `y_scale_inv` + `shift_y`) * vsubsample;
+            e[n].x1 = p[b].x * `scale_x` + `shift_x`;
+            e[n].y1 = (p[b].y * `y_scale_inv` + `shift_y`) * vsubsample;
+            ++n;
+        }
+    }
 
-   // now sort the edges by their highest point (should snap to integer, and then by x)
-   STBTT_sort(e, n, sizeof(e[0]), stbtt__edge_compare);
+    // now sort the edges by their highest point (should snap to integer, and then by x)
+    STBTT_sort(e, n, sizeof(e[0]), stbtt__edge_compare);
 
-   // now, traverse the scanlines and find the intersections on each scanline, use xor winding rule
-   stbtt__rasterize_sorted_edges(`result`, e, n, vsubsample, `off_x`, `off_y`, `userdata`);
+    // now, traverse the scanlines and find the intersections on each scanline, use xor winding rule
+    stbtt__rasterize_sorted_edges(`result`, e, n, vsubsample, `off_x`, `off_y`, `userdata`);
 
-   STBTT_free(e, userdata);
-   """.}
+    STBTT_free(e, userdata);
+    """.}
 
 proc stbtt_add_point(points: var openarray[stbtt_point], n: int, x, y: float) =
     if n < points.len: # during first pass, it's unallocated
@@ -1695,20 +1682,20 @@ proc stbtt_add_point(points: var openarray[stbtt_point], n: int, x, y: float) =
 
 # tesselate until threshhold p is happy... @TODO warped to compensate for non-linear stretching
 proc stbtt_tesselate_curve(points: var openarray[stbtt_point], num_points: var cint, x0, y0, x1, y1, x2, y2, objspace_flatness_squared : float, n: int) =
-   # midpoint
-   let mx = (x0 + 2*x1 + x2)/4
-   let my = (y0 + 2*y1 + y2)/4
-   # versus directly drawn line
-   let dx = (x0+x2)/2 - mx
-   let dy = (y0+y2)/2 - my
-   if n > 16: # 65536 segments on one curve better be enough!
-      return
-   if dx*dx+dy*dy > objspace_flatness_squared: # half-pixel error allowed... need to be smaller if AA
-      stbtt_tesselate_curve(points, num_points, x0,y0, (x0+x1)/2.0, (y0+y1)/2.0, mx,my, objspace_flatness_squared, n+1)
-      stbtt_tesselate_curve(points, num_points, mx,my, (x1+x2)/2.0, (y1+y2)/2.0, x2,y2, objspace_flatness_squared, n+1)
-   else:
-      stbtt_add_point(points, num_points, x2, y2)
-      num_points += 1
+    # midpoint
+    let mx = (x0 + 2*x1 + x2)/4
+    let my = (y0 + 2*y1 + y2)/4
+    # versus directly drawn line
+    let dx = (x0+x2)/2 - mx
+    let dy = (y0+y2)/2 - my
+    if n > 16: # 65536 segments on one curve better be enough!
+        return
+    if dx*dx+dy*dy > objspace_flatness_squared: # half-pixel error allowed... need to be smaller if AA
+        stbtt_tesselate_curve(points, num_points, x0,y0, (x0+x1)/2.0, (y0+y1)/2.0, mx,my, objspace_flatness_squared, n+1)
+        stbtt_tesselate_curve(points, num_points, mx,my, (x1+x2)/2.0, (y1+y2)/2.0, x2,y2, objspace_flatness_squared, n+1)
+    else:
+        stbtt_add_point(points, num_points, x2, y2)
+        num_points += 1
 
 proc toCArray[T](s: seq[T]): ptr T =
     result = cast[ptr T](alloc(s.len * sizeof(T)))
@@ -1717,7 +1704,7 @@ proc toCArray[T](s: seq[T]): ptr T =
         p[i] = v
 
 # returns number of contours
-proc stbtt_FlattenCurves(vertices: openarray[stbtt_vertex], objspace_flatness: cfloat, contour_lengths: var ptr cint, num_contours: var cint): ptr[stbtt_point] =
+proc stbtt_FlattenCurves(vertices: openarray[stbtt_vertex], objspace_flatness: cfloat, contour_lengths: var ptr cint, num_contours: var cint): seq[stbtt_point] =
     var num_points : cint = 0
 
     let objspace_flatness_squared = objspace_flatness * objspace_flatness
@@ -1776,17 +1763,17 @@ proc stbtt_FlattenCurves(vertices: openarray[stbtt_vertex], objspace_flatness: c
 
         contour_lengths_arr[n] = num_points - start
 
-    result = windings.toCArray()
+    result = windings
 
-proc stbtt_Rasterize(result: ptr stbtt_bitmap, flatness_in_pixels: cfloat, vertices: openarray[stbtt_vertex], scale_x, scale_y, shift_x, shift_y: cfloat, x_off, y_off, invert: cint, userdata: pointer = nil) {.exportc.} =
+proc stbtt_Rasterize(result: var stbtt_bitmap, flatness_in_pixels: cfloat, vertices: openarray[stbtt_vertex], scale_x, scale_y, shift_x, shift_y: cfloat, x_off, y_off, invert: cint, userdata: pointer = nil) {.exportc.} =
     let scale = min(scale_x, scale_y)
     var winding_count: cint
     var winding_lengths: ptr cint
-    let windings = stbtt_FlattenCurves(vertices, cfloat(flatness_in_pixels / scale), winding_lengths, winding_count);
+    var windings = stbtt_FlattenCurves(vertices, cfloat(flatness_in_pixels / scale), winding_lengths, winding_count);
     if not windings.isNil:
-        stbtt_rasterize(result, windings, winding_lengths, winding_count, scale_x, scale_y, shift_x, shift_y, x_off, y_off, invert, userdata)
+        stbtt_rasterize(result, addr windings[0], winding_lengths, winding_count, scale_x, scale_y, shift_x, shift_y, x_off, y_off, invert, userdata)
         if not winding_lengths.isNil: dealloc(winding_lengths)
-        if not windings.isNil: dealloc(windings)
+        #if not windings.isNil: dealloc(windings)
 
 {.emit: """
 
@@ -1826,7 +1813,7 @@ proc stbtt_GetGlyphBitmapSubpixel(info: stbtt_fontinfo, scale_x, scale_y, shift_
       gbm.pixels = cast[ptr uint8](alloc(gbm.w * gbm.h))
       if not gbm.pixels.isNil:
          gbm.stride = gbm.w
-         stbtt_Rasterize(addr gbm, 0.35, vertices, sx, sy, shift_x, shift_y, ix0, iy0, 1)
+         stbtt_Rasterize(gbm, 0.35, vertices, sx, sy, shift_x, shift_y, ix0, iy0, 1)
 
    #if not vertices.isNil: dealloc(vertices)
    result = gbm.pixels
@@ -1846,9 +1833,7 @@ proc stbtt_MakeGlyphBitmapSubpixel(info: stbtt_fontinfo, output: ptr uint8, out_
     gbm.stride = out_stride
 
     if gbm.w != 0 and gbm.h != 0:
-        stbtt_Rasterize(addr gbm, 0.35, vertices, scale_x, scale_y, shift_x, shift_y, ix0, iy0, 1)
-
-    #if not vertices.isNil: dealloc(vertices)
+        stbtt_Rasterize(gbm, 0.35, vertices, scale_x, scale_y, shift_x, shift_y, ix0, iy0, 1)
 
 {.emit: """
 
