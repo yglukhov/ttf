@@ -1635,7 +1635,8 @@ proc stbtt_rasterize(result: var stbtt_bitmap, pts: ptr stbtt_point, wcount: ptr
 
     {.emit: """
     int n = 0;
-    for (int i=0; i < `windings`; ++i)
+    int i=0;
+    for (i=0; i < `windings`; ++i)
         n += `wcount`[i];
 
     stbtt_edge *e = (stbtt_edge *) STBTT_malloc(sizeof(*e) * (n+1), userdata); // add an extra one as a sentinel
@@ -1643,11 +1644,12 @@ proc stbtt_rasterize(result: var stbtt_bitmap, pts: ptr stbtt_point, wcount: ptr
     n = 0;
 
     int m=0;
-    for (int i=0; i < `windings`; ++i) {
+    for (i=0; i < `windings`; ++i) {
         stbtt_point *p = `pts` + m;
         m += `wcount`[i];
         int j = `wcount`[i]-1;
-        for (int k=0; k < `wcount`[i]; j=k++) {
+        int k;
+        for (k=0; k < `wcount`[i]; j=k++) {
             int a=k,b=j;
             // skip the edge if horizontal
             if (p[j].y == p[k].y)
