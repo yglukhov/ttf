@@ -1,5 +1,6 @@
 
 import math
+import algorithm
 
 proc STBTT_malloc(size: int, userdata: pointer): pointer {.exportc.} = alloc(size)
 proc STBTT_free(data: pointer, userdata: pointer) {.exportc.} =
@@ -660,9 +661,7 @@ extern void stbtt_MakeCodepointBitmapSubpixel(const stbtt_fontinfo *info, unsign
 //extern unsigned char *stbtt_GetGlyphBitmapSubpixel(const stbtt_fontinfo *info, float scale_x, float scale_y, float shift_x, float shift_y, int glyph, int *width, int *height, int *xoff, int *yoff);
 """.}
 
-proc stbtt_MakeGlyphBitmap*(info: stbtt_fontinfo, output: ptr byte, out_w, out_h, out_stride: cint, scale_x, scale_y: cfloat, glyph: cint) {.importc.}
 proc stbtt_GetGlyphBitmapBox*(info: stbtt_fontinfo, glyph: cint, scale_x, scale_y: cfloat, ix0, iy0, ix1, iy1: var cint) {.importc.}
-proc stbtt_GetGlyphBitmapBoxSubpixel*(info: stbtt_fontinfo, glyph: cint, scale_x, scale_y, shift_x, shift_y: cfloat, ix0, iy0, ix1, iy1: var cint) {.importc.}
 
 type stbtt_bitmap {.exportc.} = object
     w,h,stride: cint
@@ -1380,10 +1379,10 @@ proc stbtt_ScaleForPixelHeight*(info: stbtt_fontinfo, height: cfloat): cfloat {.
     result = height / fheight.cfloat
 
 proc stbtt_ScaleForMappingEmToPixels(info: stbtt_fontinfo, pixels: cfloat): cfloat {.exportc.} =
-   ## computes a scale factor to produce a font whose EM size is mapped to
-   ## 'pixels' tall. This is probably what traditional APIs compute, but
-   ## I'm not positive.
-   return pixels / ttUSHORT(info.data[], info.head + 18).cfloat
+    ## computes a scale factor to produce a font whose EM size is mapped to
+    ## 'pixels' tall. This is probably what traditional APIs compute, but
+    ## I'm not positive.
+    return pixels / ttUSHORT(info.data[], info.head + 18).cfloat
 
 
 {.emit: """
@@ -1399,7 +1398,7 @@ void stbtt_FreeShape(const stbtt_fontinfo *info, stbtt_vertex *v)
 #
 # antialiasing software rasterizer
 #
-proc stbtt_GetGlyphBitmapBoxSubpixel(info: stbtt_fontinfo, glyph: cint, scale_x, scale_y, shift_x, shift_y: cfloat, ix0, iy0, ix1, iy1: ptr cint) {.exportc.} =
+proc stbtt_GetGlyphBitmapBoxSubpixel(info: stbtt_fontinfo, glyph: cint, scale_x, scale_y, shift_x, shift_y: cfloat, ix0, iy0, ix1, iy1: ptr cint) =
     var x0, y0, x1, y1: cint
     if not stbtt_GetGlyphBox(info, glyph, addr x0, addr y0, addr x1, addr y1):
         # e.g. space character
@@ -1408,11 +1407,11 @@ proc stbtt_GetGlyphBitmapBoxSubpixel(info: stbtt_fontinfo, glyph: cint, scale_x,
         if not ix1.isNil: ix1[] = 0
         if not iy1.isNil: iy1[] = 0
     else:
-       # move to integral bboxes (treating pixels as little squares, what pixels get touched)?
-       if not ix0.isNil: ix0[] = floor( x0.cfloat * scale_x + shift_x).cint
-       if not iy0.isNil: iy0[] = floor(-y1.cfloat * scale_y + shift_y).cint
-       if not ix1.isNil: ix1[] = ceil ( x1.cfloat * scale_x + shift_x).cint
-       if not iy1.isNil: iy1[] = ceil (-y0.cfloat * scale_y + shift_y).cint
+        # move to integral bboxes (treating pixels as little squares, what pixels get touched)?
+        if not ix0.isNil: ix0[] = floor( x0.cfloat * scale_x + shift_x).cint
+        if not iy0.isNil: iy0[] = floor(-y1.cfloat * scale_y + shift_y).cint
+        if not ix1.isNil: ix1[] = ceil ( x1.cfloat * scale_x + shift_x).cint
+        if not iy1.isNil: iy1[] = ceil (-y0.cfloat * scale_y + shift_y).cint
 
 proc stbtt_GetGlyphBitmapBox(info: stbtt_fontinfo, glyph: cint, scale_x, scale_y: cfloat, ix0, iy0, ix1, iy1: ptr cint) {.exportc.} =
     stbtt_GetGlyphBitmapBoxSubpixel(info, glyph, scale_x, scale_y, 0.0, 0.0, ix0, iy0, ix1, iy1)
@@ -1509,173 +1508,158 @@ proc stbtt_fill_active_edges(scanline: ptr uint8, length: cint, e: ptr stbtt_act
    """.}
 
 
-{.emit:"""
-static void stbtt__rasterize_sorted_edges(stbtt_bitmap *result, stbtt_edge *e, int n, int vsubsample, int off_x, int off_y, void *userdata)
-{
-   stbtt_active_edge *active = NULL;
-   int y,j=0;
-   int max_weight = (255 / vsubsample);  // weight per vertical scanline
-   int s; // vertical subsample index
-   unsigned char scanline_data[512], *scanline;
+proc stbtt_rasterize_sorted_edges(result: var stbtt_bitmap, e: ptr stbtt_edge, n, vsubsample, off_x, off_y: cint, userdata: pointer) =
+    {.emit:"""
+    stbtt_active_edge *active = NULL;
+    int y,j=0;
+    int max_weight = (255 / vsubsample);  // weight per vertical scanline
+    int s; // vertical subsample index
+    unsigned char scanline_data[512], *scanline;
 
-   if (result->w > 512)
-      scanline = (unsigned char *) STBTT_malloc(result->w, userdata);
-   else
-      scanline = scanline_data;
+    if (result->w > 512)
+    scanline = (unsigned char *) STBTT_malloc(result->w, userdata);
+    else
+    scanline = scanline_data;
 
-   y = off_y * vsubsample;
-   e[n].y0 = (off_y + result->h) * (float) vsubsample + 1;
+    y = `off_y` * vsubsample;
+    e[n].y0 = (`off_y` + result->h) * (float) vsubsample + 1;
 
-   while (j < result->h) {
-      STBTT_memset(scanline, 0, result->w);
-      for (s=0; s < vsubsample; ++s) {
-         // find center of pixel for this scanline
-         float scan_y = y + 0.5f;
-         stbtt_active_edge **step = &active;
+    while (j < result->h) {
+        STBTT_memset(scanline, 0, result->w);
+        for (s=0; s < vsubsample; ++s) {
+            // find center of pixel for this scanline
+            float scan_y = y + 0.5f;
+            stbtt_active_edge **step = &active;
 
-         // update all active edges;
-         // remove all active edges that terminate before the center of this scanline
-         while (*step) {
-            stbtt_active_edge * z = *step;
-            if (z->ey <= scan_y) {
-               *step = z->next; // delete from list
-               STBTT_assert(z->valid);
-               z->valid = 0;
-               STBTT_free(z, userdata);
-            } else {
-               z->x += z->dx; // advance to position for current scanline
-               step = &((*step)->next); // advance through list
+            // update all active edges;
+            // remove all active edges that terminate before the center of this scanline
+            while (*step) {
+                stbtt_active_edge * z = *step;
+                if (z->ey <= scan_y) {
+                    *step = z->next; // delete from list
+                    STBTT_assert(z->valid);
+                    z->valid = 0;
+                    STBTT_free(z, userdata);
+                } else {
+                    z->x += z->dx; // advance to position for current scanline
+                    step = &((*step)->next); // advance through list
+                }
             }
-         }
 
-         // resort the list if needed
-         for(;;) {
-            int changed=0;
-            step = &active;
-            while (*step && (*step)->next) {
-               if ((*step)->x > (*step)->next->x) {
-                  stbtt_active_edge *t = *step;
-                  stbtt_active_edge *q = t->next;
+            // resort the list if needed
+            for(;;) {
+                int changed=0;
+                step = &active;
+                while (*step && (*step)->next) {
+                    if ((*step)->x > (*step)->next->x) {
+                        stbtt_active_edge *t = *step;
+                        stbtt_active_edge *q = t->next;
 
-                  t->next = q->next;
-                  q->next = t;
-                  *step = q;
-                  changed = 1;
-               }
-               step = &(*step)->next;
+                        t->next = q->next;
+                        q->next = t;
+                        *step = q;
+                        changed = 1;
+                    }
+                    step = &(*step)->next;
+                }
+                if (!changed) break;
             }
-            if (!changed) break;
-         }
 
-         // insert all edges that start before the center of this scanline -- omit ones that also end on this scanline
-         while (e->y0 <= scan_y) {
-            if (e->y1 > scan_y) {
-               stbtt_active_edge *z = new_active(e, off_x, scan_y, userdata);
-               // find insertion point
-               if (active == NULL)
-                  active = z;
-               else if (z->x < active->x) {
-                  // insert at front
-                  z->next = active;
-                  active = z;
-               } else {
-                  // find thing to insert AFTER
-                  stbtt_active_edge *p = active;
-                  while (p->next && p->next->x < z->x)
-                     p = p->next;
-                  // at this point, p->next->x is NOT < z->x
-                  z->next = p->next;
-                  p->next = z;
-               }
+            // insert all edges that start before the center of this scanline -- omit ones that also end on this scanline
+            while (e->y0 <= scan_y) {
+                if (e->y1 > scan_y) {
+                    stbtt_active_edge *z = new_active(e, `off_x`, scan_y, userdata);
+                    // find insertion point
+                    if (active == NULL)
+                    active = z;
+                    else if (z->x < active->x) {
+                        // insert at front
+                        z->next = active;
+                        active = z;
+                    } else {
+                        // find thing to insert AFTER
+                        stbtt_active_edge *p = active;
+                        while (p->next && p->next->x < z->x)
+                        p = p->next;
+                        // at this point, p->next->x is NOT < z->x
+                        z->next = p->next;
+                        p->next = z;
+                    }
+                }
+                ++e;
             }
-            ++e;
-         }
 
-         // now process all active edges in XOR fashion
-         if (active)
-            stbtt_fill_active_edges(scanline, result->w, active, max_weight);
+            // now process all active edges in XOR fashion
+            if (active)
+                stbtt_fill_active_edges(scanline, result->w, active, max_weight);
 
-         ++y;
-      }
-      STBTT_memcpy(result->pixels + j * result->stride, scanline, result->w);
-      ++j;
-   }
+            ++y;
+        }
+        STBTT_memcpy(result->pixels + j * result->stride, scanline, result->w);
+        ++j;
+    }
 
-   while (active) {
-      stbtt_active_edge *z = active;
-      active = active->next;
-      STBTT_free(z, userdata);
-   }
+    while (active) {
+        stbtt_active_edge *z = active;
+        active = active->next;
+        STBTT_free(z, userdata);
+    }
 
-   if (scanline != scanline_data)
-      STBTT_free(scanline, userdata);
-}
+    if (scanline != scanline_data)
+    STBTT_free(scanline, userdata);
+    """.}
 
-static int stbtt__edge_compare(const void *p, const void *q)
-{
-   stbtt_edge *a = (stbtt_edge *) p;
-   stbtt_edge *b = (stbtt_edge *) q;
-
-   if (a->y0 < b->y0) return -1;
-   if (a->y0 > b->y0) return  1;
-   return 0;
-}
-
-""".}
-
-type stbtt_point {.exportc.} = object
+type stbtt_point = object
     x, y: cfloat
 
-proc stbtt_rasterize(result: var stbtt_bitmap, pts: ptr stbtt_point, wcount: ptr cint, windings: cint, scale_x, scale_y, shift_x, shift_y: cfloat, off_x, off_y, invert: cint, userdata: pointer) {.exportc.} =
+proc stbtt_rasterize(result: var stbtt_bitmap, ptsArr: openarray[stbtt_point], wcountArr: openarray[cint], scale_x, scale_y, shift_x, shift_y: cfloat, off_x, off_y, invert: cint, userdata: pointer) {.exportc.} =
     let y_scale_inv = if invert != 0: -scale_y else: scale_y
     let vsubsample : cint = if result.h < 8: 15 else: 5
     # vsubsample should divide 255 evenly; otherwise we won't reach full opacity
 
     # now we have to blow out the windings into explicit edge lists
 
-    {.emit: """
-    int n = 0;
-    int i=0;
-    for (i=0; i < `windings`; ++i)
-        n += `wcount`[i];
+    var n : cint = 0
+    for w in wcountArr: n += w
 
-    stbtt_edge *e = (stbtt_edge *) STBTT_malloc(sizeof(*e) * (n+1), userdata); // add an extra one as a sentinel
-    if (e == 0) return;
-    n = 0;
+    var e = newSeq[stbtt_edge](n+1)
+    n = 0
 
-    int m=0;
-    for (i=0; i < `windings`; ++i) {
-        stbtt_point *p = `pts` + m;
-        m += `wcount`[i];
-        int j = `wcount`[i]-1;
-        int k;
-        for (k=0; k < `wcount`[i]; j=k++) {
-            int a=k,b=j;
-            // skip the edge if horizontal
-            if (p[j].y == p[k].y)
-                continue;
-            // add edge from j to k to the list
+    var m : cint = 0
+
+    for i in 0 ..< wcountArr.len:
+        let cm = m
+        m += wcountArr[i]
+        var j = wcountArr[i]-1
+        for k in 0 ..< wcountArr[i]:
+            var a = k
+            var b = j
+            # skip the edge if horizontal
+            if ptsArr[cm + j].y == ptsArr[cm + k].y:
+                j = k.int32
+                continue
+            # add edge from j to k to the list
             e[n].invert = 0;
-            if (`invert` ? p[j].y > p[k].y : p[j].y < p[k].y) {
-                e[n].invert = 1;
-                a=j,b=k;
-            }
-            e[n].x0 = p[a].x * `scale_x` + `shift_x`;
-            e[n].y0 = (p[a].y * `y_scale_inv` + `shift_y`) * vsubsample;
-            e[n].x1 = p[b].x * `scale_x` + `shift_x`;
-            e[n].y1 = (p[b].y * `y_scale_inv` + `shift_y`) * vsubsample;
-            ++n;
-        }
-    }
+            if ( if invert != 0: ptsArr[cm + j].y > ptsArr[cm + k].y else: ptsArr[cm + j].y < ptsArr[cm + k].y):
+                e[n].invert = 1
+                a = j
+                b = k.int32
+            e[n].x0 = ptsArr[cm + a].x * scale_x + shift_x;
+            e[n].y0 = (ptsArr[cm + a].y * y_scale_inv + shift_y) * vsubsample.float;
+            e[n].x1 = ptsArr[cm + b].x * scale_x + shift_x;
+            e[n].y1 = (ptsArr[cm + b].y * y_scale_inv + shift_y) * vsubsample.float;
+            inc n
+            j = k.int32
 
-    // now sort the edges by their highest point (should snap to integer, and then by x)
-    STBTT_sort(e, n, sizeof(e[0]), stbtt__edge_compare);
+    # now sort the edges by their highest point (should snap to integer, and then by x)
+    e.sort proc (a, b: stbtt_edge): int =
+       if a.y0 < b.y0: return -1
+       if a.y0 > b.y0: return  1
+       return 0
 
-    // now, traverse the scanlines and find the intersections on each scanline, use xor winding rule
-    stbtt__rasterize_sorted_edges(`result`, e, n, vsubsample, `off_x`, `off_y`, `userdata`);
-
-    STBTT_free(e, userdata);
-    """.}
+    let pe = addr e[0]
+    # now, traverse the scanlines and find the intersections on each scanline, use xor winding rule
+    stbtt_rasterize_sorted_edges(result, pe, n, vsubsample, off_x, off_y, userdata)
 
 proc stbtt_add_point(points: var openarray[stbtt_point], n: int, x, y: float) =
     if n < points.len: # during first pass, it's unallocated
@@ -1706,7 +1690,7 @@ proc toCArray[T](s: seq[T]): ptr T =
         p[i] = v
 
 # returns number of contours
-proc stbtt_FlattenCurves(vertices: openarray[stbtt_vertex], objspace_flatness: cfloat, contour_lengths: var ptr cint, num_contours: var cint): seq[stbtt_point] =
+proc stbtt_FlattenCurves(vertices: openarray[stbtt_vertex], objspace_flatness: cfloat, contour_lengths: var seq[cint]): seq[stbtt_point] =
     var num_points : cint = 0
 
     let objspace_flatness_squared = objspace_flatness * objspace_flatness
@@ -1717,11 +1701,8 @@ proc stbtt_FlattenCurves(vertices: openarray[stbtt_vertex], objspace_flatness: c
         if v.`type` == STBTT_vmove:
             n += 1
 
-    num_contours = n
     if n == 0: return
-    contour_lengths = cast[ptr cint](alloc(num_contours * sizeof(cint)))
-
-    var contour_lengths_arr = cast[ptr array[99999, cint]](contour_lengths)
+    contour_lengths = newSeq[cint](n)
 
     var windings = newSeq[stbtt_point](0)
 
@@ -1738,7 +1719,7 @@ proc stbtt_FlattenCurves(vertices: openarray[stbtt_vertex], objspace_flatness: c
                 of STBTT_vmove:
                     # start the next contour
                     if n >= 0:
-                        contour_lengths_arr[n] = num_points - start
+                        contour_lengths[n] = num_points - start
                     n += 1
                     start = num_points
 
@@ -1763,18 +1744,17 @@ proc stbtt_FlattenCurves(vertices: openarray[stbtt_vertex], objspace_flatness: c
                 else:
                     discard
 
-        contour_lengths_arr[n] = num_points - start
+        contour_lengths[n] = num_points - start
 
     result = windings
 
-proc stbtt_Rasterize(result: var stbtt_bitmap, flatness_in_pixels: cfloat, vertices: openarray[stbtt_vertex], scale_x, scale_y, shift_x, shift_y: cfloat, x_off, y_off, invert: cint, userdata: pointer = nil) {.exportc.} =
+proc stbtt_Rasterize(result: var stbtt_bitmap, flatness_in_pixels: cfloat, vertices: openarray[stbtt_vertex], scale_x, scale_y, shift_x, shift_y: cfloat, x_off, y_off, invert: cint, userdata: pointer = nil) =
     let scale = min(scale_x, scale_y)
-    var winding_count: cint
-    var winding_lengths: ptr cint
-    var windings = stbtt_FlattenCurves(vertices, cfloat(flatness_in_pixels / scale), winding_lengths, winding_count);
+    var winding_lengths = newSeq[cint]()
+    var windings = stbtt_FlattenCurves(vertices, cfloat(flatness_in_pixels / scale), winding_lengths);
     if not windings.isNil:
-        stbtt_rasterize(result, addr windings[0], winding_lengths, winding_count, scale_x, scale_y, shift_x, shift_y, x_off, y_off, invert, userdata)
-        if not winding_lengths.isNil: dealloc(winding_lengths)
+        stbtt_rasterize(result, windings, winding_lengths, scale_x, scale_y, shift_x, shift_y, x_off, y_off, invert, userdata)
+        #if not winding_lengths.isNil: dealloc(winding_lengths)
         #if not windings.isNil: dealloc(windings)
 
 {.emit: """
@@ -1837,12 +1817,10 @@ proc stbtt_MakeGlyphBitmapSubpixel(info: stbtt_fontinfo, output: ptr uint8, out_
     if gbm.w != 0 and gbm.h != 0:
         stbtt_Rasterize(gbm, 0.35, vertices, scale_x, scale_y, shift_x, shift_y, ix0, iy0, 1)
 
-{.emit: """
+proc stbtt_MakeGlyphBitmap*(info: stbtt_fontinfo, output: ptr byte, out_w, out_h, out_stride: cint, scale_x, scale_y: cfloat, glyph: cint) {.exportc.} =
+    stbtt_MakeGlyphBitmapSubpixel(info, output, out_w, out_h, out_stride, scale_x, scale_y, 0.0f,0.0f, glyph)
 
-void N_RAW_NIMCALL stbtt_MakeGlyphBitmap(const stbtt_fontinfo *info, unsigned char *output, int out_w, int out_h, int out_stride, float scale_x, float scale_y, int glyph)
-{
-   stbtt_MakeGlyphBitmapSubpixel(info, output, out_w, out_h, out_stride, scale_x, scale_y, 0.0f,0.0f, glyph);
-}
+{.emit: """
 
 unsigned char *stbtt_GetCodepointBitmapSubpixel(const stbtt_fontinfo *info, float scale_x, float scale_y, float shift_x, float shift_y, int codepoint, int *width, int *height, int *xoff, int *yoff)
 {
