@@ -626,8 +626,6 @@ extern void stbtt_FreeShape(const stbtt_fontinfo *info, stbtt_vertex *vertices);
 // BITMAP RENDERING
 //
 
-extern void stbtt_FreeBitmap(unsigned char *bitmap, void *userdata);
-// frees the bitmap allocated below
 
 extern unsigned char *stbtt_GetCodepointBitmap(const stbtt_fontinfo *info, float scale_x, float scale_y, int codepoint, int *width, int *height, int *xoff, int *yoff);
 // allocates a large-enough single-channel 8bpp bitmap and renders the
@@ -1683,12 +1681,6 @@ proc stbtt_tesselate_curve(points: var openarray[stbtt_point], num_points: var c
         stbtt_add_point(points, num_points, x2, y2)
         num_points += 1
 
-proc toCArray[T](s: seq[T]): ptr T =
-    result = cast[ptr T](alloc(s.len * sizeof(T)))
-    var p = cast[ptr array[999999, T]](result)
-    for i, v in s:
-        p[i] = v
-
 # returns number of contours
 proc stbtt_FlattenCurves(vertices: openarray[stbtt_vertex], objspace_flatness: cfloat, contour_lengths: var seq[cint]): seq[stbtt_point] =
     var num_points : cint = 0
@@ -1756,15 +1748,6 @@ proc stbtt_Rasterize(result: var stbtt_bitmap, flatness_in_pixels: cfloat, verti
         stbtt_rasterize(result, windings, winding_lengths, scale_x, scale_y, shift_x, shift_y, x_off, y_off, invert, userdata)
         #if not winding_lengths.isNil: dealloc(winding_lengths)
         #if not windings.isNil: dealloc(windings)
-
-{.emit: """
-
-void stbtt_FreeBitmap(unsigned char *bitmap, void *userdata)
-{
-   STBTT_free(bitmap, userdata);
-}
-
-""".}
 
 proc stbtt_GetGlyphBitmapSubpixel(info: stbtt_fontinfo, scale_x, scale_y, shift_x, shift_y: cfloat, glyph: cint, width, height, xoff, yoff: ptr cint): ptr uint8 {.exportc.} =
    var ix0,iy0,ix1,iy1 : cint
