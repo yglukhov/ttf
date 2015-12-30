@@ -1292,7 +1292,8 @@ proc stbtt_GetGlyphShape(info: stbtt_fontinfo, glyph_index: cint): seq[stbtt_ver
      # numberOfCounters == 0, do nothing
      discard
 
-  vertices.setLen(num_vertices)
+  if num_vertices > 0:
+    vertices.setLen(num_vertices)
   return vertices
 
 proc stbtt_GetGlyphHMetrics*(info: stbtt_fontinfo, glyph_index: cint, advanceWidth, leftSideBearing: var cint) {.exportc.} =
@@ -1305,34 +1306,26 @@ proc stbtt_GetGlyphHMetrics*(info: stbtt_fontinfo, glyph_index: cint, advanceWid
         leftSideBearing = ttSHORT(info.data[], info.hmtx + 4 * numOfLongHorMetrics + 2 * (glyph_index - numOfLongHorMetrics))
 
 proc stbtt_GetGlyphKernAdvance*(info: stbtt_fontinfo, glyph1, glyph2: cint): cint =
-    {.emit: """
-    stbtt_uint8 *data = `info`->data + `info`->kern;
-    stbtt_uint32 needle, straw;
-    int l, r, m;
-
-    // we only look at the first table. it must be 'horizontal' and format 0.
-    if (!`info`->kern)
-       return 0;
-    if (ttUSHORT(data+2) < 1) // number of tables, need at least 1
-       return 0;
-    if (ttUSHORT(data+8) != 1) // horizontal flag must be set in format
-       return 0;
-
-    l = 0;
-    r = ttUSHORT(data+10) - 1;
-    needle = `glyph1` << 16 | `glyph2`;
-    while (l <= r) {
-       m = (l + r) >> 1;
-       straw = ttULONG(data+18+(m*6)); // note: unaligned read
-       if (needle < straw)
-           r = m - 1;
-       else if (needle > straw)
-           l = m + 1;
-       else
-           return ttSHORT(data+22+(m*6));
-    }
-    return 0;
-    """.}
+    # we only look at the first table. it must be 'horizontal' and format 0.
+    if info.kern == 0:
+        return 0
+    if ttUSHORT(info.data[], info.kern + 2) < 1: # number of tables, need at least 1
+        return 0
+    if ttUSHORT(info.data[], info.kern + 8) != 1: # horizontal flag must be set in format
+        return 0
+    var l: cint = 0
+    var r: cint = cast[cint](ttUSHORT(info.data[], info.kern + 10) - 1)
+    let needle : uint32 = (cast[uint32](glyph1) shl 16) or cast[uint32](glyph2)
+    while (l <= r):
+        let m : cint = (l + r) shr 1
+        let straw = ttULONG(info.data[], info.kern + 18 + (m * 6)) # note: unaligned read
+        if (needle < straw):
+            r = m - 1
+        elif (needle > straw):
+            l = m + 1
+        else:
+            return ttSHORT(info.data[], info.kern + 22 + (m * 6))
+    return 0
 
 proc stbtt_GetCodepointKernAdvance*(info: stbtt_fontinfo, ch1, ch2: cint): cint =
     # an additional amount to add to the 'advance' value between ch1 and ch2
@@ -1387,7 +1380,7 @@ proc stbtt_ScaleForMappingEmToPixels(info: stbtt_fontinfo, pixels: cfloat): cflo
 
 void stbtt_FreeShape(const stbtt_fontinfo *info, stbtt_vertex *v)
 {
-   STBTT_free(v, info->userdata);
+    STBTT_free(v, info->userdata);
 }
 
 """.}
