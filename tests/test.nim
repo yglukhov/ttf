@@ -11,9 +11,6 @@ proc findFile(name: string): string = findFileInPaths(name, ".", "tests")
 let fontPath = findFile("Arial.ttf")
 doAssert(not fontPath.isNil, "Font file not found")
 
-let expectedPath = findFile("expected.bmp")
-doAssert(not expectedPath.isNil, "expected.bmp not found")
-
 var rawData = readFile(fontPath)
 
 var info: stbtt_fontinfo
@@ -75,5 +72,18 @@ proc saveBitmap(filename: string, data: openarray[byte], w, h: int) =
     s.encodeBMP(str, w, h, 24)
     s.close()
 
+let expectedPath = findFile("expected.bmp")
+doAssert(not expectedPath.isNil, "expected.bmp not found")
+
 saveBitmap("actual.bmp", bitmap, b_w, b_h)
 doAssert(sameFileContent("actual.bmp", expectedPath))
+
+# Test distance fields
+import private.edtaa3func
+
+let expectedDFPath = findFile("expected_df.bmp")
+doAssert(not expectedDFPath.isNil, "expected.bmp not found")
+
+make_distance_map(addr bitmap[0], b_w.cuint, b_h.cuint)
+saveBitmap("actual_df.bmp", bitmap, b_w, b_h)
+doAssert(sameFileContent("actual_df.bmp", expectedDFPath))
