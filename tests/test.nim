@@ -84,6 +84,6 @@ import private.edtaa3func
 let expectedDFPath = findFile("expected_df.bmp")
 doAssert(not expectedDFPath.isNil, "expected.bmp not found")
 
-make_distance_map(addr bitmap[0], b_w.cuint, b_h.cuint)
+make_distance_map(bitmap, b_w.cuint, b_h.cuint)
 saveBitmap("actual_df.bmp", bitmap, b_w, b_h)
 doAssert(sameFileContent("actual_df.bmp", expectedDFPath))
