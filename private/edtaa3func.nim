@@ -1,4 +1,4 @@
-import sequtils
+import sequtils, math
 
 # This code is taken from freetype-gl
 
@@ -9,27 +9,19 @@ import sequtils
 # Compute the local gradient at edge pixels using convolution filters.
 # The gradient is computed only at edge pixels. At other places in the
 # image, it is never used, and it's mostly zero anyway.
-proc computegradient(img: ptr cdouble, w, h: cint, gx, gy: ptr cdouble) {.exportc.} =
-    {.emit: """
-    int i,j,k;
-    double glength;
-#define SQRT2 1.4142136
-    for(i = 1; i < `h`-1; i++) { // Avoid edges where the kernels would spill over
-        for(j = 1; j < `w`-1; j++) {
-            k = i*`w` + j;
-            if((`img`[k]>0.0) && (`img`[k]<1.0)) { // Compute gradient for edge pixels only
-                `gx`[k] = -`img`[k-`w`-1] - SQRT2*`img`[k-1] - `img`[k+`w`-1] + `img`[k-`w`+1] + SQRT2*`img`[k+1] + `img`[k+`w`+1];
-                `gy`[k] = -`img`[k-`w`-1] - SQRT2*`img`[k-`w`] - `img`[k+`w`-1] + `img`[k-`w`+1] + SQRT2*`img`[k+`w`] + `img`[k+`w`+1];
-                glength = `gx`[k]*`gx`[k] + `gy`[k]*`gy`[k];
-                if(glength > 0.0) { // Avoid division by zero
-                    glength = sqrt(glength);
-                    `gx`[k]=`gx`[k]/glength;
-                    `gy`[k]=`gy`[k]/glength;
-                }
-            }
-        }
-    }
-    """.}
+proc computegradient(img: openarray[cdouble], w, h: cint, gx, gy: var openarray[cdouble]) =
+    const SQRT2 = cdouble(1.4142136)
+    for i in 1 ..< h - 1: # Avoid edges where the kernels would spill over
+        for j in 1 ..< w - 1:
+            let k = i * w + j
+            if (img[k] > 0) and (img[k] < 1): # Compute gradient for edge pixels only
+                gx[k] = -img[k-w-1] - SQRT2*img[k-1] - img[k+w-1] + img[k-w+1] + SQRT2*img[k+1] + img[k+w+1]
+                gy[k] = -img[k-w-1] - SQRT2*img[k-w] - img[k+w-1] + img[k-w+1] + SQRT2*img[k+w] + img[k+w+1]
+                var glength = gx[k]*gx[k] + gy[k]*gy[k]
+                if glength > 0: # Avoid division by zero
+                    glength = sqrt(glength)
+                    gx[k] /= glength
+                    gy[k] /= glength
     # TODO: Compute reasonable values for gx, gy also around the image edges.
     # (These are zero now, which reduces the accuracy for a 1-pixel wide region
     # around the image edge.) 2x2 kernels would be suitable for this.
@@ -521,70 +513,6 @@ proc edtaa3(img, gx, gy: ptr cdouble, w, h: cint, distx, disty: ptr int16, dist:
   /* The transformation is completed. */
   """.}
 
-# ------------------------------------------------------ make_distance_map ---
-proc distance_map*(data: ptr cdouble, width, height: cuint) =
-    {.emit: """
-    short * xdist = (short *)  malloc( `width` * `height` * sizeof(short) );
-    short * ydist = (short *)  malloc( `width` * `height` * sizeof(short) );
-    double * gx   = (double *) calloc( `width` * `height`, sizeof(double) );
-    double * gy      = (double *) calloc( `width` * `height`, sizeof(double) );
-    double * outside = (double *) calloc( `width` * `height`, sizeof(double) );
-    double * inside  = (double *) calloc( `width` * `height`, sizeof(double) );
-    int i;
-
-    // Compute outside = edtaa3(bitmap); % Transform background (0's)
-    computegradient( `data`, `width`, `height`, gx, gy);
-    edtaa3(`data`, gx, gy, `width`, `height`, xdist, ydist, outside);
-    for( i=0; i<`width`*`height`; ++i)
-    {
-        if( outside[i] < 0.0 )
-        {
-            outside[i] = 0.0;
-        }
-    }
-
-    // Compute inside = edtaa3(1-bitmap); % Transform foreground (1's)
-    memset( gx, 0, sizeof(double)*`width`*`height` );
-    memset( gy, 0, sizeof(double)*`width`*`height` );
-    for( i=0; i<`width`*`height`; ++i)
-        `data`[i] = 1 - `data`[i];
-    computegradient( `data`, `width`, `height`, gx, gy );
-    edtaa3( `data`, gx, gy, `width`, `height`, xdist, ydist, inside );
-    for( i=0; i<`width`*`height`; ++i )
-    {
-        if( inside[i] < 0 )
-        {
-            inside[i] = 0.0;
-        }
-    }
-
-    // distmap = outside - inside; % Bipolar distance field
-    float vmin = +INFINITY;
-    for( i=0; i<`width`*`height`; ++i)
-    {
-        outside[i] -= inside[i];
-        if( outside[i] < vmin )
-        {
-            vmin = outside[i];
-        }
-    }
-    vmin = abs(vmin);
-    for( i=0; i<`width`*`height`; ++i)
-    {
-        float v = outside[i];
-        if     ( v < -vmin) outside[i] = -vmin;
-        else if( v > +vmin) outside[i] = +vmin;
-        `data`[i] = (outside[i]+vmin)/(2*vmin);
-    }
-
-    free( xdist );
-    free( ydist );
-    free( gx );
-    free( gy );
-    free( outside );
-    free( inside );
-    """.}
-
 proc make_distance_map*(img: var openarray[byte], width, height : cuint) =
     let sz = (width * height).int
     var xdist = newSeq[int16](sz)
@@ -610,7 +538,7 @@ proc make_distance_map*(img: var openarray[byte], width, height : cuint) =
         data[i] = (img[i].cdouble - img_min) / img_max
 
     # Compute outside = edtaa3(bitmap); % Transform background (0's)
-    computegradient(addr data[0], width.cint, height.cint, addr gx[0], addr gy[0])
+    computegradient(data, width.cint, height.cint, gx, gy)
     edtaa3(addr data[0], addr gx[0], addr gy[0], width.cint, height.cint, addr xdist[0], addr ydist[0], addr outside[0])
 
     for i in 0 ..< sz:
@@ -623,7 +551,7 @@ proc make_distance_map*(img: var openarray[byte], width, height : cuint) =
 
     for i in 0 ..< sz:
         data[i] = 1 - data[i]
-    computegradient(addr data[0], width.cint, height.cint, addr gx[0], addr gy[0])
+    computegradient(data, width.cint, height.cint, gx, gy)
     edtaa3(addr data[0], addr gx[0], addr gy[0], width.cint, height.cint, addr xdist[0], addr ydist[0], addr inside[0])
     for i in 0 ..< sz:
         if inside[i] < 0:
