@@ -494,7 +494,7 @@ proc make_distance_map*(data: var openarray[cdouble], width, height : cuint) =
     # distmap = outside - inside; % Bipolar distance field
     for i in 0 ..< sz:
         var o = outside[i]
-        o -= inside[i]
+        o = o - inside[i]
         o = 128 + o * 16
         if o < 0: o = 0
         if o > 255: o = 255
