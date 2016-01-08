@@ -493,11 +493,12 @@ proc make_distance_map*(data: var openarray[cdouble], width, height : cuint) =
 
     # distmap = outside - inside; % Bipolar distance field
     for i in 0 ..< sz:
-        outside[i] -= inside[i]
-        outside[i] = 128+outside[i]*16
-        if outside[i] < 0: outside[i] = 0
-        if outside[i] > 255: outside[i] = 255
-        data[i] = outside[i]
+        var o = outside[i]
+        o -= inside[i]
+        o = 128 + o * 16
+        if o < 0: o = 0
+        if o > 255: o = 255
+        data[i] = o
 
 proc make_distance_map*(img: var openarray[byte], width, height : cuint) =
     let sz = (width * height).int
