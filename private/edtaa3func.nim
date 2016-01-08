@@ -154,61 +154,61 @@ proc edtaa3(img, gx, gy: openarray[cdouble], w, h: cint, distx, disty: var opena
             var x = 1
             # Middle pixels have all neighbors
             while x < w - 1:
-                defer:
-                    inc x
-                    inc i
                 olddist = dist[i]
-                if olddist <= 0: continue # No need to update further
-                c = i+offset_l
-                cdistx = distx[c]
-                cdisty = disty[c]
-                newdistx = cdistx+1
-                newdisty = cdisty
-                newdist = DISTAA(c, cdistx, cdisty, newdistx, newdisty)
-                if newdist < olddist-epsilon:
-                    distx[i]=newdistx
-                    disty[i]=newdisty
-                    dist[i]=newdist
-                    olddist=newdist
-                    changed = true
+                if olddist > 0:
+                    c = i+offset_l
+                    cdistx = distx[c]
+                    cdisty = disty[c]
+                    newdistx = cdistx+1
+                    newdisty = cdisty
+                    newdist = DISTAA(c, cdistx, cdisty, newdistx, newdisty)
+                    if newdist < olddist-epsilon:
+                        distx[i]=newdistx
+                        disty[i]=newdisty
+                        dist[i]=newdist
+                        olddist=newdist
+                        changed = true
 
-                c = i+offset_lu
-                cdistx = distx[c]
-                cdisty = disty[c]
-                newdistx = cdistx+1
-                newdisty = cdisty+1
-                newdist = DISTAA(c, cdistx, cdisty, newdistx, newdisty)
-                if(newdist < olddist-epsilon):
-                    distx[i]=newdistx
-                    disty[i]=newdisty
-                    dist[i]=newdist
-                    olddist=newdist
-                    changed = true
+                    c = i+offset_lu
+                    cdistx = distx[c]
+                    cdisty = disty[c]
+                    newdistx = cdistx+1
+                    newdisty = cdisty+1
+                    newdist = DISTAA(c, cdistx, cdisty, newdistx, newdisty)
+                    if newdist < olddist-epsilon:
+                        distx[i]=newdistx
+                        disty[i]=newdisty
+                        dist[i]=newdist
+                        olddist=newdist
+                        changed = true
 
-                c = i+offset_u
-                cdistx = distx[c]
-                cdisty = disty[c]
-                newdistx = cdistx
-                newdisty = cdisty+1
-                newdist = DISTAA(c, cdistx, cdisty, newdistx, newdisty)
-                if newdist < olddist-epsilon:
-                    distx[i]=newdistx
-                    disty[i]=newdisty
-                    dist[i]=newdist
-                    olddist=newdist
-                    changed = true
+                    c = i+offset_u
+                    cdistx = distx[c]
+                    cdisty = disty[c]
+                    newdistx = cdistx
+                    newdisty = cdisty+1
+                    newdist = DISTAA(c, cdistx, cdisty, newdistx, newdisty)
+                    if newdist < olddist-epsilon:
+                        distx[i]=newdistx
+                        disty[i]=newdisty
+                        dist[i]=newdist
+                        olddist=newdist
+                        changed = true
 
-                c = i+offset_ur
-                cdistx = distx[c]
-                cdisty = disty[c]
-                newdistx = cdistx-1
-                newdisty = cdisty+1
-                newdist = DISTAA(c, cdistx, cdisty, newdistx, newdisty)
-                if newdist < olddist-epsilon:
-                    distx[i]=newdistx
-                    disty[i]=newdisty
-                    dist[i]=newdist
-                    changed = true
+                    c = i+offset_ur
+                    cdistx = distx[c]
+                    cdisty = disty[c]
+                    newdistx = cdistx-1
+                    newdisty = cdisty+1
+                    newdist = DISTAA(c, cdistx, cdisty, newdistx, newdisty)
+                    if newdist < olddist-epsilon:
+                        distx[i]=newdistx
+                        disty[i]=newdisty
+                        dist[i]=newdist
+                        changed = true
+
+                inc x
+                inc i
 
             # Rightmost pixel of row is special, has no right neighbors
             olddist = dist[i]
@@ -258,29 +258,26 @@ proc edtaa3(img, gx, gy: openarray[cdouble], w, h: cint, distx, disty: var opena
             # scan left, propagate distance from right
             x = w-2
             while x >= 0:
-                defer:
-                    dec x
-                    dec i
                 olddist = dist[i]
-                if olddist <= 0: continue # Already zero distance
-
-                let c = i+offset_r
-                cdistx = distx[c]
-                cdisty = disty[c]
-                newdistx = cdistx-1
-                newdisty = cdisty
-                newdist = DISTAA(c, cdistx, cdisty, newdistx, newdisty)
-                if newdist < olddist-epsilon:
-                    distx[i]=newdistx
-                    disty[i]=newdisty
-                    dist[i]=newdist
-                    changed = true
+                if olddist > 0:
+                    let c = i+offset_r
+                    cdistx = distx[c]
+                    cdisty = disty[c]
+                    newdistx = cdistx-1
+                    newdisty = cdisty
+                    newdist = DISTAA(c, cdistx, cdisty, newdistx, newdisty)
+                    if newdist < olddist-epsilon:
+                        distx[i]=newdistx
+                        disty[i]=newdisty
+                        dist[i]=newdist
+                        changed = true
+                dec x
+                dec i
             inc y
 
         # Scan rows in reverse order, except last row
         y = h - 2
         while y >= 0:
-            defer: dec y
             # move index to rightmost pixel of current row
             var i = y*w + w-1
 
@@ -318,62 +315,61 @@ proc edtaa3(img, gx, gy: openarray[cdouble], w, h: cint, distx, disty: var opena
             # Middle pixels have all neighbors
             var x = w - 2
             while x > 0:
-                defer:
-                    dec x
-                    dec i
                 olddist = dist[i]
-                if olddist <= 0: continue # Already zero distance
+                if olddist > 0:
+                    c = i+offset_r
+                    cdistx = distx[c]
+                    cdisty = disty[c]
+                    newdistx = cdistx-1
+                    newdisty = cdisty
+                    newdist = DISTAA(c, cdistx, cdisty, newdistx, newdisty)
+                    if newdist < olddist-epsilon:
+                        distx[i]=newdistx
+                        disty[i]=newdisty
+                        dist[i]=newdist
+                        olddist=newdist
+                        changed = true
 
-                c = i+offset_r
-                cdistx = distx[c]
-                cdisty = disty[c]
-                newdistx = cdistx-1
-                newdisty = cdisty
-                newdist = DISTAA(c, cdistx, cdisty, newdistx, newdisty)
-                if newdist < olddist-epsilon:
-                    distx[i]=newdistx
-                    disty[i]=newdisty
-                    dist[i]=newdist
-                    olddist=newdist
-                    changed = true
+                    c = i+offset_rd
+                    cdistx = distx[c]
+                    cdisty = disty[c]
+                    newdistx = cdistx-1
+                    newdisty = cdisty-1
+                    newdist = DISTAA(c, cdistx, cdisty, newdistx, newdisty)
+                    if newdist < olddist-epsilon:
+                        distx[i]=newdistx
+                        disty[i]=newdisty
+                        dist[i]=newdist
+                        olddist=newdist
+                        changed = true
 
-                c = i+offset_rd
-                cdistx = distx[c]
-                cdisty = disty[c]
-                newdistx = cdistx-1
-                newdisty = cdisty-1
-                newdist = DISTAA(c, cdistx, cdisty, newdistx, newdisty)
-                if newdist < olddist-epsilon:
-                    distx[i]=newdistx
-                    disty[i]=newdisty
-                    dist[i]=newdist
-                    olddist=newdist
-                    changed = true
+                    c = i+offset_d
+                    cdistx = distx[c]
+                    cdisty = disty[c]
+                    newdistx = cdistx
+                    newdisty = cdisty-1
+                    newdist = DISTAA(c, cdistx, cdisty, newdistx, newdisty)
+                    if newdist < olddist-epsilon:
+                        distx[i]=newdistx
+                        disty[i]=newdisty
+                        dist[i]=newdist
+                        olddist=newdist
+                        changed = true
 
-                c = i+offset_d
-                cdistx = distx[c]
-                cdisty = disty[c]
-                newdistx = cdistx
-                newdisty = cdisty-1
-                newdist = DISTAA(c, cdistx, cdisty, newdistx, newdisty)
-                if newdist < olddist-epsilon:
-                    distx[i]=newdistx
-                    disty[i]=newdisty
-                    dist[i]=newdist
-                    olddist=newdist
-                    changed = true
+                    c = i+offset_dl
+                    cdistx = distx[c]
+                    cdisty = disty[c]
+                    newdistx = cdistx+1
+                    newdisty = cdisty-1
+                    newdist = DISTAA(c, cdistx, cdisty, newdistx, newdisty)
+                    if newdist < olddist-epsilon:
+                        distx[i]=newdistx
+                        disty[i]=newdisty
+                        dist[i]=newdist
+                        changed = true
 
-                c = i+offset_dl
-                cdistx = distx[c]
-                cdisty = disty[c]
-                newdistx = cdistx+1
-                newdisty = cdisty-1
-                newdist = DISTAA(c, cdistx, cdisty, newdistx, newdisty)
-                if newdist < olddist-epsilon:
-                    distx[i]=newdistx
-                    disty[i]=newdisty
-                    dist[i]=newdist
-                    changed = true
+                dec x
+                dec i
 
             # Leftmost pixel is special, has no left neighbors
             olddist = dist[i]
@@ -422,24 +418,24 @@ proc edtaa3(img, gx, gy: openarray[cdouble], w, h: cint, distx, disty: var opena
             i = y*w + 1
             x = 1
             while x < w:
-                defer:
-                    inc x
-                    inc i
                 # scan right, propagate distance from left */
                 olddist = dist[i]
-                if olddist <= 0: continue # Already zero distance
+                if olddist > 0:
+                    c = i+offset_l
+                    cdistx = distx[c]
+                    cdisty = disty[c]
+                    newdistx = cdistx+1
+                    newdisty = cdisty
+                    newdist = DISTAA(c, cdistx, cdisty, newdistx, newdisty)
+                    if newdist < olddist-epsilon:
+                        distx[i]=newdistx
+                        disty[i]=newdisty
+                        dist[i]=newdist
+                        changed = true
+                inc x
+                inc i
 
-                c = i+offset_l
-                cdistx = distx[c]
-                cdisty = disty[c]
-                newdistx = cdistx+1
-                newdisty = cdisty
-                newdist = DISTAA(c, cdistx, cdisty, newdistx, newdisty)
-                if newdist < olddist-epsilon:
-                    distx[i]=newdistx
-                    disty[i]=newdisty
-                    dist[i]=newdist
-                    changed = true
+            dec y
 
 when defined(js):
     proc newSeqDouble(sz: int): seq[cdouble] {.importc: "new Float32Array".}
