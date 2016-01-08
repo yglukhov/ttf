@@ -439,13 +439,12 @@ proc edtaa3(img, gx, gy: openarray[cdouble], w, h: cint, distx, disty: var opena
                     dist[i]=newdist
                     changed = true
 
-proc make_distance_map*(img: var openarray[byte], width, height : cuint) =
+proc make_distance_map*(data: var openarray[cdouble], width, height : cuint) =
     let sz = (width * height).int
     var xdist = newSeq[int16](sz)
     var ydist = newSeq[int16](sz)
     var gx = newSeq[cdouble](sz)
     var gy = newSeq[cdouble](sz)
-    var data = newSeq[cdouble](sz)
     var outside = newSeq[cdouble](sz)
     var inside = newSeq[cdouble](sz)
 
@@ -454,14 +453,13 @@ proc make_distance_map*(img: var openarray[byte], width, height : cuint) =
 
     # Convert img into double (data)
     for i in 0 ..< sz:
-        let v = img[i].cdouble
-        data[i] = v
+        let v = data[i]
         if v > img_max: img_max = v
         if v < img_min: img_min = v
 
     # Rescale image levels between 0 and 1
     for i in 0 ..< sz:
-        data[i] = (img[i].cdouble - img_min) / img_max
+        data[i] = (data[i].cdouble - img_min) / img_max
 
     # Compute outside = edtaa3(bitmap); % Transform background (0's)
     computegradient(data, width.cint, height.cint, gx, gy)
@@ -489,4 +487,18 @@ proc make_distance_map*(img: var openarray[byte], width, height : cuint) =
         outside[i] = 128+outside[i]*16
         if outside[i] < 0: outside[i] = 0
         if outside[i] > 255: outside[i] = 255
-        img[i] = (255.byte - outside[i].byte)
+        data[i] = outside[i]
+
+proc make_distance_map*(img: var openarray[byte], width, height : cuint) =
+    let sz = (width * height).int
+    var data = newSeq[cdouble](sz)
+
+    # Convert img into double (data)
+    for i in 0 ..< sz:
+        data[i] = img[i].cdouble
+
+    make_distance_map(data, width, height)
+
+    # Convert back
+    for i in 0 ..< sz:
+        img[i] = (255.byte - data[i].byte)
