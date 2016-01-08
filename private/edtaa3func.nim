@@ -18,8 +18,8 @@ proc computegradient(img: openarray[cdouble], w, h: cint, gx, gy: var openarray[
                 var glength = gx[k]*gx[k] + gy[k]*gy[k]
                 if glength > 0: # Avoid division by zero
                     glength = sqrt(glength)
-                    gx[k] /= glength
-                    gy[k] /= glength
+                    gx[k] = gx[k] / glength
+                    gy[k] = gy[k] / glength
     # TODO: Compute reasonable values for gx, gy also around the image edges.
     # (These are zero now, which reduces the accuracy for a 1-pixel wide region
     # around the image edge.) 2x2 kernels would be suitable for this.
@@ -39,8 +39,8 @@ proc edgedf(gx, gy, a: cdouble): cdouble =
         var ggx = gx
         var ggy = gy
         if glength > 0:
-            ggx /= glength
-            ggy /= glength
+            ggx = ggx / glength
+            ggy = ggy / glength
         # Everything is symmetric wrt sign and transposition,
         # so move to first octant (ggx>=0, ggy>=0, ggx>=ggy) to
         # avoid handling all possible edge directions.
@@ -75,7 +75,7 @@ proc distaa3(img, gximg, gyimg: openarray[cdouble], w, c, xc, yc, xi, yi: cint):
     else:
         # Estimate gradient based on direction to edge (accurate for large di)
         result = edgedf(dx, dy, a)
-    result += di # Same metric as edtaa2, except at edges (where di=0)
+    result = result + di # Same metric as edtaa2, except at edges (where di=0)
 
 proc edtaa3(img, gx, gy: openarray[cdouble], w, h: cint, distx, disty: var openarray[int16], dist: var openarray[cdouble]) =
     var c : int
