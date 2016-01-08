@@ -2,6 +2,8 @@ import sequtils, math
 
 # Original is taken from freetype-gl
 
+{.push checks: off, stackTrace: off.}
+
 # Compute the local gradient at edge pixels using convolution filters.
 # The gradient is computed only at edge pixels. At other places in the
 # image, it is never used, and it's mostly zero anyway.
@@ -97,10 +99,10 @@ proc edtaa3(img, gx, gy: openarray[cdouble], w, h: cint, distx, disty: var opena
     let offset_l = -1
     let offset_lu = -w - 1
 
-    var changed = true
-
     # Initialize the distance images
-    for i in 0 ..< w * h:
+    let sz = w * h
+    var i = 0
+    while i < sz:
         distx[i] = 0 # At first, all pixels point to
         disty[i] = 0 # themselves as the closest known.
         if img[i] <= 0:
@@ -109,6 +111,9 @@ proc edtaa3(img, gx, gy: openarray[cdouble], w, h: cint, distx, disty: var opena
             dist[i] = edgedf(gx[i], gy[i], img[i]) # Gradient-assisted estimate
         else:
             dist[i]= 0 # Inside the object
+        inc i
+
+    var changed = true
 
     # Perform the transformation
     while changed: # Sweep until no more updates are made
@@ -189,7 +194,7 @@ proc edtaa3(img, gx, gy: openarray[cdouble], w, h: cint, distx, disty: var opena
                 newdistx = cdistx
                 newdisty = cdisty+1
                 newdist = DISTAA(c, cdistx, cdisty, newdistx, newdisty)
-                if(newdist < olddist-epsilon):
+                if newdist < olddist-epsilon:
                     distx[i]=newdistx
                     disty[i]=newdisty
                     dist[i]=newdist
@@ -202,7 +207,7 @@ proc edtaa3(img, gx, gy: openarray[cdouble], w, h: cint, distx, disty: var opena
                 newdistx = cdistx-1
                 newdisty = cdisty+1
                 newdist = DISTAA(c, cdistx, cdisty, newdistx, newdisty)
-                if(newdist < olddist-epsilon):
+                if newdist < olddist-epsilon:
                     distx[i]=newdistx
                     disty[i]=newdisty
                     dist[i]=newdist
@@ -210,14 +215,14 @@ proc edtaa3(img, gx, gy: openarray[cdouble], w, h: cint, distx, disty: var opena
 
             # Rightmost pixel of row is special, has no right neighbors
             olddist = dist[i]
-            if(olddist > 0): # If not already zero distance
+            if olddist > 0: # If not already zero distance
                 c = i+offset_l
                 cdistx = distx[c]
                 cdisty = disty[c]
                 newdistx = cdistx+1
                 newdisty = cdisty
                 newdist = DISTAA(c, cdistx, cdisty, newdistx, newdisty)
-                if(newdist < olddist-epsilon):
+                if newdist < olddist-epsilon:
                     distx[i]=newdistx
                     disty[i]=newdisty
                     dist[i]=newdist
@@ -230,7 +235,7 @@ proc edtaa3(img, gx, gy: openarray[cdouble], w, h: cint, distx, disty: var opena
                 newdistx = cdistx+1
                 newdisty = cdisty+1
                 newdist = DISTAA(c, cdistx, cdisty, newdistx, newdisty)
-                if(newdist < olddist-epsilon):
+                if newdist < olddist-epsilon:
                     distx[i]=newdistx
                     disty[i]=newdisty
                     dist[i]=newdist
@@ -243,7 +248,7 @@ proc edtaa3(img, gx, gy: openarray[cdouble], w, h: cint, distx, disty: var opena
                 newdistx = cdistx
                 newdisty = cdisty+1
                 newdist = DISTAA(c, cdistx, cdisty, newdistx, newdisty)
-                if(newdist < olddist-epsilon):
+                if newdist < olddist-epsilon:
                     distx[i]=newdistx
                     disty[i]=newdisty
                     dist[i]=newdist
@@ -260,7 +265,7 @@ proc edtaa3(img, gx, gy: openarray[cdouble], w, h: cint, distx, disty: var opena
                     dec x
                     dec i
                 olddist = dist[i]
-                if(olddist <= 0): continue # Already zero distance
+                if olddist <= 0: continue # Already zero distance
 
                 let c = i+offset_r
                 cdistx = distx[c]
@@ -268,7 +273,7 @@ proc edtaa3(img, gx, gy: openarray[cdouble], w, h: cint, distx, disty: var opena
                 newdistx = cdistx-1
                 newdisty = cdisty
                 newdist = DISTAA(c, cdistx, cdisty, newdistx, newdisty)
-                if(newdist < olddist-epsilon):
+                if newdist < olddist-epsilon:
                     distx[i]=newdistx
                     disty[i]=newdisty
                     dist[i]=newdist
@@ -293,7 +298,7 @@ proc edtaa3(img, gx, gy: openarray[cdouble], w, h: cint, distx, disty: var opena
                 newdistx = cdistx
                 newdisty = cdisty-1
                 newdist = DISTAA(c, cdistx, cdisty, newdistx, newdisty)
-                if(newdist < olddist-epsilon):
+                if newdist < olddist-epsilon:
                     distx[i]=newdistx
                     disty[i]=newdisty
                     dist[i]=newdist
@@ -306,7 +311,7 @@ proc edtaa3(img, gx, gy: openarray[cdouble], w, h: cint, distx, disty: var opena
                 newdistx = cdistx+1
                 newdisty = cdisty-1
                 newdist = DISTAA(c, cdistx, cdisty, newdistx, newdisty)
-                if(newdist < olddist-epsilon):
+                if newdist < olddist-epsilon:
                     distx[i]=newdistx
                     disty[i]=newdisty
                     dist[i]=newdist
@@ -320,7 +325,7 @@ proc edtaa3(img, gx, gy: openarray[cdouble], w, h: cint, distx, disty: var opena
                     dec x
                     dec i
                 olddist = dist[i]
-                if(olddist <= 0): continue # Already zero distance
+                if olddist <= 0: continue # Already zero distance
 
                 c = i+offset_r
                 cdistx = distx[c]
@@ -328,7 +333,7 @@ proc edtaa3(img, gx, gy: openarray[cdouble], w, h: cint, distx, disty: var opena
                 newdistx = cdistx-1
                 newdisty = cdisty
                 newdist = DISTAA(c, cdistx, cdisty, newdistx, newdisty)
-                if(newdist < olddist-epsilon):
+                if newdist < olddist-epsilon:
                     distx[i]=newdistx
                     disty[i]=newdisty
                     dist[i]=newdist
@@ -341,7 +346,7 @@ proc edtaa3(img, gx, gy: openarray[cdouble], w, h: cint, distx, disty: var opena
                 newdistx = cdistx-1
                 newdisty = cdisty-1
                 newdist = DISTAA(c, cdistx, cdisty, newdistx, newdisty)
-                if(newdist < olddist-epsilon):
+                if newdist < olddist-epsilon:
                     distx[i]=newdistx
                     disty[i]=newdisty
                     dist[i]=newdist
@@ -354,7 +359,7 @@ proc edtaa3(img, gx, gy: openarray[cdouble], w, h: cint, distx, disty: var opena
                 newdistx = cdistx
                 newdisty = cdisty-1
                 newdist = DISTAA(c, cdistx, cdisty, newdistx, newdisty)
-                if(newdist < olddist-epsilon):
+                if newdist < olddist-epsilon:
                     distx[i]=newdistx
                     disty[i]=newdisty
                     dist[i]=newdist
@@ -367,7 +372,7 @@ proc edtaa3(img, gx, gy: openarray[cdouble], w, h: cint, distx, disty: var opena
                 newdistx = cdistx+1
                 newdisty = cdisty-1
                 newdist = DISTAA(c, cdistx, cdisty, newdistx, newdisty)
-                if(newdist < olddist-epsilon):
+                if newdist < olddist-epsilon:
                     distx[i]=newdistx
                     disty[i]=newdisty
                     dist[i]=newdist
@@ -375,14 +380,14 @@ proc edtaa3(img, gx, gy: openarray[cdouble], w, h: cint, distx, disty: var opena
 
             # Leftmost pixel is special, has no left neighbors
             olddist = dist[i]
-            if(olddist > 0): # If not already zero distance
+            if olddist > 0: # If not already zero distance
                 c = i+offset_r
                 cdistx = distx[c]
                 cdisty = disty[c]
                 newdistx = cdistx-1
                 newdisty = cdisty
                 newdist = DISTAA(c, cdistx, cdisty, newdistx, newdisty)
-                if(newdist < olddist-epsilon):
+                if newdist < olddist-epsilon:
                     distx[i]=newdistx
                     disty[i]=newdisty
                     dist[i]=newdist
@@ -395,7 +400,7 @@ proc edtaa3(img, gx, gy: openarray[cdouble], w, h: cint, distx, disty: var opena
                 newdistx = cdistx-1
                 newdisty = cdisty-1
                 newdist = DISTAA(c, cdistx, cdisty, newdistx, newdisty)
-                if(newdist < olddist-epsilon):
+                if newdist < olddist-epsilon:
                     distx[i]=newdistx
                     disty[i]=newdisty
                     dist[i]=newdist
@@ -408,7 +413,7 @@ proc edtaa3(img, gx, gy: openarray[cdouble], w, h: cint, distx, disty: var opena
                 newdistx = cdistx
                 newdisty = cdisty-1
                 newdist = DISTAA(c, cdistx, cdisty, newdistx, newdisty)
-                if(newdist < olddist-epsilon):
+                if newdist < olddist-epsilon:
                     distx[i]=newdistx
                     disty[i]=newdisty
                     dist[i]=newdist
@@ -425,7 +430,7 @@ proc edtaa3(img, gx, gy: openarray[cdouble], w, h: cint, distx, disty: var opena
                     inc i
                 # scan right, propagate distance from left */
                 olddist = dist[i]
-                if(olddist <= 0): continue # Already zero distance
+                if olddist <= 0: continue # Already zero distance
 
                 c = i+offset_l
                 cdistx = distx[c]
@@ -433,72 +438,99 @@ proc edtaa3(img, gx, gy: openarray[cdouble], w, h: cint, distx, disty: var opena
                 newdistx = cdistx+1
                 newdisty = cdisty
                 newdist = DISTAA(c, cdistx, cdisty, newdistx, newdisty)
-                if(newdist < olddist-epsilon):
+                if newdist < olddist-epsilon:
                     distx[i]=newdistx
                     disty[i]=newdisty
                     dist[i]=newdist
                     changed = true
 
+when defined(js):
+    proc newSeqDouble(sz: int): seq[cdouble] {.importc: "new Float32Array".}
+    proc newSeqInt16(sz: int): seq[int16] {.importc: "new Int16Array".}
+else:
+    template newSeqDouble(sz: int): seq[cdouble] = newSeq[cdouble](sz)
+    template newSeqInt16(sz: int): seq[int16] = newSeq[int16](sz)
+
 proc make_distance_map*(data: var openarray[cdouble], width, height : cuint) =
     let sz = (width * height).int
-    var xdist = newSeq[int16](sz)
-    var ydist = newSeq[int16](sz)
-    var gx = newSeq[cdouble](sz)
-    var gy = newSeq[cdouble](sz)
-    var outside = newSeq[cdouble](sz)
-    var inside = newSeq[cdouble](sz)
+    var xdist = newSeqInt16(sz)
+    var ydist = newSeqInt16(sz)
+    var gx = newSeqDouble(sz)
+    var gy = newSeqDouble(sz)
+    var outside = newSeqDouble(sz)
+    var inside = newSeqDouble(sz)
 
     var img_min = 255.cdouble
     var img_max = -255.cdouble
 
     # Convert img into double (data)
-    for i in 0 ..< sz:
+    var i = 0
+    while i < sz:
         let v = data[i]
         if v > img_max: img_max = v
         if v < img_min: img_min = v
+        inc i
 
     # Rescale image levels between 0 and 1
-    for i in 0 ..< sz:
-        data[i] = (data[i].cdouble - img_min) / img_max
+    i = 0
+    while i < sz:
+        data[i] = (data[i] - img_min) / img_max
+        inc i
 
     # Compute outside = edtaa3(bitmap); % Transform background (0's)
     computegradient(data, width.cint, height.cint, gx, gy)
     edtaa3(data, gx, gy, width.cint, height.cint, xdist, ydist, outside)
 
-    for i in 0 ..< sz:
+    i = 0
+    while i < sz:
         if outside[i] < 0:
             outside[i] = 0
+        inc i
 
     # Compute inside = edtaa3(1-bitmap); % Transform foreground (1's)
     gx.applyIt(0)
     gy.applyIt(0)
 
-    for i in 0 ..< sz:
+    i = 0
+    while i < sz:
         data[i] = 1 - data[i]
+        inc i
+
     computegradient(data, width.cint, height.cint, gx, gy)
     edtaa3(data, gx, gy, width.cint, height.cint, xdist, ydist, inside)
-    for i in 0 ..< sz:
+
+    i = 0
+    while i < sz:
         if inside[i] < 0:
             inside[i] = 0
+        inc i
 
     # distmap = outside - inside; % Bipolar distance field
-    for i in 0 ..< sz:
+    i = 0
+    while i < sz:
         outside[i] -= inside[i]
         outside[i] = 128+outside[i]*16
         if outside[i] < 0: outside[i] = 0
         if outside[i] > 255: outside[i] = 255
         data[i] = outside[i]
+        inc i
 
 proc make_distance_map*(img: var openarray[byte], width, height : cuint) =
     let sz = (width * height).int
-    var data = newSeq[cdouble](sz)
+    var data = newSeqDouble(sz)
 
     # Convert img into double (data)
-    for i in 0 ..< sz:
+    var i = 0
+    while i < sz:
         data[i] = img[i].cdouble
+        inc i
 
     make_distance_map(data, width, height)
 
     # Convert back
-    for i in 0 ..< sz:
+    i = 0
+    while i < sz:
         img[i] = (255.byte - data[i].byte)
+        inc i
+
+{.pop.}
