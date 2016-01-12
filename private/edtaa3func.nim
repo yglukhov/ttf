@@ -7,7 +7,7 @@ import sequtils, math
 # Compute the local gradient at edge pixels using convolution filters.
 # The gradient is computed only at edge pixels. At other places in the
 # image, it is never used, and it's mostly zero anyway.
-proc computegradient(img: openarray[cdouble], w, h: cint, gx, gy: var openarray[cdouble]) =
+proc computegradient[TFloat](img: openarray[TFloat], w, h: int, gx, gy: var openarray[TFloat]) =
     const SQRT2 = 1.4142136
     for i in 1 ..< h - 1: # Avoid edges where the kernels would spill over
         for j in 1 ..< w - 1:
@@ -31,7 +31,7 @@ proc computegradient(img: openarray[cdouble], w, h: cint, gx, gy: var openarray[
 # Using a local estimate of the edge gradient (gx,gy) yields much better
 # accuracy at and near edges, and reduces the error even at distant pixels
 # provided that the gradient direction is accurately estimated.
-proc edgedf(gx, gy, a: cdouble): cdouble =
+proc edgedf[TFloat](gx, gy, a: TFloat): TFloat =
     if gx == 0 or gy == 0: # Either A) gx or gv are zero, or B) both
         result = 0.5 - a  # Linear approximation is A) correct or B) a fair guess
     else:
@@ -56,7 +56,7 @@ proc edgedf(gx, gy, a: cdouble): cdouble =
         else: # 1-a1 < a <= 1
             result = -0.5 * (ggx + ggy) + sqrt(2.0 * ggx * ggy * (1.0 - a))
 
-proc distaa3(img, gximg, gyimg: openarray[cdouble], w, c, xc, yc, xi, yi: cint): cdouble =
+proc distaa3[TFloat](img, gximg, gyimg: openarray[TFloat], w, c, xc, yc, xi, yi: int): TFloat =
     let closest = c-xc-yc*w # Index to the edge pixel pointed to from c
     var a = img[closest]    # Grayscale value at the edge pixel
     let gx = gximg[closest] # X gradient component at the edge pixel
@@ -66,8 +66,8 @@ proc distaa3(img, gximg, gyimg: openarray[cdouble], w, c, xc, yc, xi, yi: cint):
     if a < 0.0: a = 0.0 # Clip grayscale values outside the range [0,1]
     if a == 0.0: return 1000000.0 # Not an object pixel, return "very far" ("don't know yet")
 
-    let dx = xi.cdouble
-    let dy = yi.cdouble
+    let dx = type(img[0])(xi)
+    let dy = type(img[0])(yi)
     let di = sqrt(dx*dx + dy*dy) # Length of integer vector, like a traditional EDT
     if di == 0: # Use local gradient only at edges
         # Estimate based on local gradient only
@@ -77,16 +77,16 @@ proc distaa3(img, gximg, gyimg: openarray[cdouble], w, c, xc, yc, xi, yi: cint):
         result = edgedf(dx, dy, a)
     result = result + di # Same metric as edtaa2, except at edges (where di=0)
 
-proc edtaa3(img, gx, gy: openarray[cdouble], w, h: cint, distx, disty: var openarray[int16], dist: var openarray[cdouble]) =
+proc edtaa3[TFloat](img, gx, gy: openarray[TFloat], w, h: int, distx, disty: var openarray[int16], dist: var openarray[TFloat]) =
     var c : int
-    var olddist, newdist: cdouble
+    var olddist, newdist: TFloat
     var cdistx, cdisty: int16
     var newdistx, newdisty: int16
 
     const epsilon = 1e-3
 
     # Shorthand template: add ubiquitous parameters dist, gx, gy, img and w and call distaa3()
-    template DISTAA(c, xc, yc, xi, yi): cdouble = distaa3(img, gx, gy, w, c.cint, xc.cint, yc.cint, xi.cint, yi.cint)
+    template DISTAA(c, xc, yc, xi, yi): expr = distaa3(img, gx, gy, w, c, xc, yc, xi, yi)
 
     # Initialize index offsets for the current image width
     let offset_u = -w
@@ -438,23 +438,29 @@ proc edtaa3(img, gx, gy: openarray[cdouble], w, h: cint, distx, disty: var opena
             dec y
 
 when defined(js):
-    proc newSeqDouble(sz: int): seq[cdouble] {.importc: "new Float32Array".}
+    proc newSeqFloat32(sz: int): seq[float32] {.importc: "new Float32Array".}
+    proc newSeqFloat64(sz: int): seq[float64] {.importc: "new Float64Array".}
     proc newSeqInt16(sz: int): seq[int16] {.importc: "new Int16Array".}
+
+    template newTypedSeq(T: typedesc, sz: int): expr =
+        when T is float32: newSeqFloat32(sz)
+        elif T is float64: newSeqFloat64(sz)
+        elif T is int16: newSeqInt16(sz)
+        else: {.error: "Wrong type for typed seq".}
 else:
-    template newSeqDouble(sz: int): seq[cdouble] = newSeq[cdouble](sz)
-    template newSeqInt16(sz: int): seq[int16] = newSeq[int16](sz)
+    template newTypedSeq(T: typedesc, sz: int): expr = newSeq[T](sz)
 
-proc make_distance_map*(data: var openarray[cdouble], width, height : cuint) =
+proc make_distance_map*[TFloat: SomeReal](data: var openarray[TFloat], width, height : int) =
     let sz = (width * height).int
-    var xdist = newSeqInt16(sz)
-    var ydist = newSeqInt16(sz)
-    var gx = newSeqDouble(sz)
-    var gy = newSeqDouble(sz)
-    var outside = newSeqDouble(sz)
-    var inside = newSeqDouble(sz)
+    var xdist = newTypedSeq(int16, sz)
+    var ydist = newTypedSeq(int16, sz)
+    var gx = newTypedSeq(TFloat, sz)
+    var gy = newTypedSeq(TFloat, sz)
+    var outside = newTypedSeq(TFloat, sz)
+    var inside = newTypedSeq(TFloat, sz)
 
-    var img_min = 255.cdouble
-    var img_max = -255.cdouble
+    var img_min = TFloat(255)
+    var img_max = TFloat(-255)
 
     # Convert img into double (data)
     for i in 0 ..< sz:
@@ -467,8 +473,8 @@ proc make_distance_map*(data: var openarray[cdouble], width, height : cuint) =
         data[i] = (data[i] - img_min) / img_max
 
     # Compute outside = edtaa3(bitmap); % Transform background (0's)
-    computegradient(data, width.cint, height.cint, gx, gy)
-    edtaa3(data, gx, gy, width.cint, height.cint, xdist, ydist, outside)
+    computegradient(data, width, height, gx, gy)
+    edtaa3(data, gx, gy, width, height, xdist, ydist, outside)
 
     for i in 0 ..< sz:
         if outside[i] < 0:
@@ -480,8 +486,8 @@ proc make_distance_map*(data: var openarray[cdouble], width, height : cuint) =
 
     for i in 0 ..< sz: data[i] = 1 - data[i]
 
-    computegradient(data, width.cint, height.cint, gx, gy)
-    edtaa3(data, gx, gy, width.cint, height.cint, xdist, ydist, inside)
+    computegradient(data, width, height, gx, gy)
+    edtaa3(data, gx, gy, width, height, xdist, ydist, inside)
 
     for i in 0 ..< sz:
         if inside[i] < 0:
@@ -496,13 +502,13 @@ proc make_distance_map*(data: var openarray[cdouble], width, height : cuint) =
         if o > 255: o = 255
         data[i] = o
 
-proc make_distance_map*(img: var openarray[byte], width, height : cuint) =
+proc make_distance_map*(img: var openarray[byte], width, height : int) =
     let sz = (width * height).int
-    var data = newSeqDouble(sz)
+    var data = newTypedSeq(float64, sz)
 
     # Convert img into double (data)
     for i in 0 ..< sz:
-        data[i] = img[i].cdouble
+        data[i] = type(data[i])(img[i])
 
     make_distance_map(data, width, height)
 
