@@ -899,7 +899,7 @@ proc stbtt_InitFont*(info: var stbtt_fontinfo, data: font_type, fontstart: cint)
     info.hmtx = stbtt_find_table(data, fontstart.uint32, "hmtx").cint # required
     info.kern = stbtt_find_table(data, fontstart.uint32, "kern").cint # not required
 
-    {.emit: "`info`->data = data;".}
+    {.emit: "`info`->data = `data`;".}
 
     if cmap == 0 or info.loca == 0 or info.head == 0 or info.glyf == 0 or info.hhea == 0 or info.hmtx == 0:
       return 0
