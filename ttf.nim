@@ -1310,6 +1310,9 @@ proc stbtt_GetGlyphShape(info: stbtt_fontinfo, glyph_index: cint): seq[stbtt_ver
      # numberOfCounters == 0, do nothing
      discard
 
+  if vertices.isNil:
+    return @[]
+
   if num_vertices > 0:
     vertices.setLen(num_vertices)
   return vertices
