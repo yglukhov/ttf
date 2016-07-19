@@ -14,7 +14,7 @@ doAssert(not fontPath.isNil, "Font file not found")
 var rawData = readFile(fontPath)
 
 var info: stbtt_fontinfo
-if stbtt_InitFont(info, cast[font_type](rawData.cstring), 0) == 0:
+if stbtt_InitFont(info, cast[ptr font_type](rawData.cstring), 0) == 0:
     doAssert(false, "Could not init font")
 
 let b_w = 1024.cint # bitmap width
