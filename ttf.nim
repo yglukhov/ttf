@@ -1,5 +1,5 @@
 
-# Partial port of stb truetype. Based on revision fc8b6494661167788bd0fef36106f9a492d92704 (9/13/15)
+# Partial port of stb truetype. Based on revision c9ead07188b342350530e92e14542222c3ad9abe (14/05/16)
 
 import math
 import algorithm
@@ -35,6 +35,10 @@ proc STBTT_free(data: pointer, userdata: pointer) {.exportc.} =
 //   Mikko Mononen: compound shape support, more cmap formats
 //   Tor Andersson: kerning, subpixel rendering
 //
+//   Misc other:
+//       Ryan Gordon
+//       Simon Glass
+//
 //   Bug/warning reports/fixes:
 //       "Zer" on mollyrocket (with fix)
 //       Cass Everitt
@@ -56,12 +60,17 @@ proc STBTT_free(data: pointer, userdata: pointer) {.exportc.} =
 //       Sergey Popov
 //       Giumo X. Clanjor
 //       Higor Euripedes
+//       Thomas Fields
+//       Derek Vinyard
 //
 //   Misc other:
 //       Ryan Gordon
 //
 // VERSION HISTORY
 //
+//   1.11 (2016-04-02) fix unused-variable warning
+//   1.10 (2016-04-02) user-defined fabs(); rare memory leak; remove duplicate typedef
+//   1.09 (2016-01-16) warning fix; avoid crash on outofmem; use allocation userdata properly
 //   1.08 (2015-09-13) document stbtt_Rasterize(); fixes for vertical & horizontal edges
 //   1.07 (2015-08-01) allow PackFontRanges to accept arrays of sparse codepoints;
 //                     variant PackFontRanges to pack and render in separate phases;
@@ -79,9 +88,9 @@ proc STBTT_free(data: pointer, userdata: pointer) {.exportc.} =
 //
 // LICENSE
 //
-//   This software is in the public domain. Where that dedication is not
-//   recognized, you are granted a perpetual, irrevocable license to copy,
-//   distribute, and modify this file as you see fit.
+//   This software is dual-licensed to the public domain and under the following
+//   license: you are granted a perpetual, irrevocable license to copy, modify,
+//   publish, and distribute this file as you see fit.
 //
 // USAGE
 //
@@ -407,6 +416,11 @@ int main(int arg, char **argv)
    #define STBTT_sqrt(x)      sqrt(x)
    #endif
 
+   #ifndef STBTT_fabs
+   #include <math.h>
+   #define STBTT_fabs(x)      fabs(x)
+   #endif
+
    #ifndef STBTT_assert
    #include <assert.h>
    #define STBTT_assert(x)    assert(x)
@@ -588,7 +602,7 @@ type stbtt_fontinfo* {.exportc, byRef.} = object
     indexToLocFormat: cint              # format needed to map from glyph index to glyph
 
 
-proc stbtt_InitFont*(info: var stbtt_fontinfo, data: font_type, fontstart: cint): cint {.exportc.}
+proc stbtt_InitFont*(info: var stbtt_fontinfo, data: ptr font_type, fontstart: cint): cint {.exportc.}
 # Given an offset into the file that defines a font, this function builds
 # the necessary cached info for the rest of the system. You must allocate
 # the stbtt_fontinfo yourself, and stbtt_InitFont will fill it out. You don't
@@ -889,53 +903,53 @@ proc stbtt_GetFontOffsetForIndex(font_collection: font_type, index: cint): cint 
     return -1
 
 
-proc stbtt_InitFont*(info: var stbtt_fontinfo, data: font_type, fontstart: cint): cint =
+proc stbtt_InitFont*(info: var stbtt_fontinfo, data: ptr font_type, fontstart: cint): cint =
     info.fontstart = fontstart
-    let cmap = stbtt_find_table(data, fontstart.uint32, "cmap")       # required
-    info.loca = stbtt_find_table(data, fontstart.uint32, "loca").cint # required
-    info.head = stbtt_find_table(data, fontstart.uint32, "head").cint # required
-    info.glyf = stbtt_find_table(data, fontstart.uint32, "glyf").cint # required
-    info.hhea = stbtt_find_table(data, fontstart.uint32, "hhea").cint # required
-    info.hmtx = stbtt_find_table(data, fontstart.uint32, "hmtx").cint # required
-    info.kern = stbtt_find_table(data, fontstart.uint32, "kern").cint # not required
+    let cmap = stbtt_find_table(data[], fontstart.uint32, "cmap")       # required
+    info.loca = stbtt_find_table(data[], fontstart.uint32, "loca").cint # required
+    info.head = stbtt_find_table(data[], fontstart.uint32, "head").cint # required
+    info.glyf = stbtt_find_table(data[], fontstart.uint32, "glyf").cint # required
+    info.hhea = stbtt_find_table(data[], fontstart.uint32, "hhea").cint # required
+    info.hmtx = stbtt_find_table(data[], fontstart.uint32, "hmtx").cint # required
+    info.kern = stbtt_find_table(data[], fontstart.uint32, "kern").cint # not required
 
     {.emit: "`info`->data = `data`;".}
 
     if cmap == 0 or info.loca == 0 or info.head == 0 or info.glyf == 0 or info.hhea == 0 or info.hmtx == 0:
       return 0
 
-    let t = stbtt_find_table(data, fontstart.uint32, "maxp")
+    let t = stbtt_find_table(data[], fontstart.uint32, "maxp")
     if t == 0:
         info.numGlyphs = 0xffff
     else:
-        info.numGlyphs = ttUSHORT(data, t.int + 4).cint
+        info.numGlyphs = ttUSHORT(data[], t.int + 4).cint
 
     # find a cmap encoding table we understand *now* to avoid searching
     # later. (todo: could make this installable)
     # the same regardless of glyph.
 
-    let numTables = ttUSHORT(data, cmap.int + 2).int
+    let numTables = ttUSHORT(data[], cmap.int + 2).int
     info.index_map = 0
 
     for i in 0 .. < numTables:
         let encoding_record = cmap.int + 4 + 8 * i
         # find an encoding we understand:
-        case ttUSHORT(data, encoding_record).PlatformId:
+        case ttUSHORT(data[], encoding_record).PlatformId:
             of STBTT_PLATFORM_ID_MICROSOFT:
-                case ttUSHORT(data, encoding_record + 2):
+                case ttUSHORT(data[], encoding_record + 2):
                     of STBTT_MS_EID_UNICODE_BMP, STBTT_MS_EID_UNICODE_FULL:
                         # MS/Unicode
-                        info.index_map = cmap.cint + ttULONG(data, encoding_record + 4).cint
+                        info.index_map = cmap.cint + ttULONG(data[], encoding_record + 4).cint
                     else: discard
             of STBTT_PLATFORM_ID_UNICODE:
                 # Mac/iOS has these
                 # all the encodingIDs are unicode, so we don't bother to check it
-                info.index_map = cmap.cint + ttULONG(data, encoding_record + 4).cint
+                info.index_map = cmap.cint + ttULONG(data[], encoding_record + 4).cint
             else: discard
     if info.index_map == 0:
         return 0
 
-    info.indexToLocFormat = ttUSHORT(data, info.head + 50).cint
+    info.indexToLocFormat = ttUSHORT(data[], info.head + 50).cint
     return 1
 
 {.emit: """
@@ -1767,10 +1781,12 @@ proc stbtt_rasterize_sorted_edges(result: var stbtt_bitmap, e: ptr stbtt_edge, n
       while (`e`->y0 <= scan_y_bottom) {
          if (`e`->y0 != `e`->y1) {
             stbtt_active_edge *z = `stbtt_new_active`(&hh, `e`, `off_x`, scan_y_top, `userdata`);
-            STBTT_assert(z->ey >= scan_y_top);
-            // insert at front
-            z->next = active;
-            active = z;
+            if (z != NULL) {
+                STBTT_assert(z->ey >= scan_y_top);
+                // insert at front
+                z->next = active;
+                active = z;
+            }
          }
          ++`e`;
       }
@@ -1786,7 +1802,7 @@ proc stbtt_rasterize_sorted_edges(result: var stbtt_bitmap, e: ptr stbtt_edge, n
             int m;
             sum += scanline2[i];
             k = scanline[i] + sum;
-            k = (float) fabs(k)*255 + 0.5f;
+            k = (float) STBTT_fabs(k)*255 + 0.5f;
             m = (int) k;
             if (m > 255) m = 255;
             `result`->pixels[j*`result`->stride + i] = (unsigned char) m;
