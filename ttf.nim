@@ -1404,7 +1404,7 @@ proc stbtt_ScaleForPixelHeight*(info: stbtt_fontinfo, height: cfloat): cfloat {.
     let fheight = ttSHORT(info.data[], info.hhea + 4) - ttSHORT(info.data[], info.hhea + 6)
     result = height / fheight.cfloat
 
-proc stbtt_ScaleForMappingEmToPixels(info: stbtt_fontinfo, pixels: cfloat): cfloat {.exportc.} =
+proc stbtt_ScaleForMappingEmToPixels*(info: stbtt_fontinfo, pixels: cfloat): cfloat {.exportc.} =
     ## computes a scale factor to produce a font whose EM size is mapped to
     ## 'pixels' tall. This is probably what traditional APIs compute, but
     ## I'm not positive.
