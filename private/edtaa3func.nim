@@ -447,17 +447,42 @@ when defined(js):
         elif T is float64: newSeqFloat64(sz)
         elif T is int16: newSeqInt16(sz)
         else: {.error: "Wrong type for typed seq".}
+
+    template setTypedSeqLen[T](s: var seq[T], sz: int) =
+        s = newTypedSeq(T, sz) # TODO: This should be optimized
 else:
     template newTypedSeq(T: typedesc, sz: int): expr = newSeq[T](sz)
+    template setTypedSeqLen[T](s: var seq[T], sz: int) = s.setLen(sz)
 
-proc make_distance_map*[TFloat: SomeReal](data: var openarray[TFloat], width, height : int) =
+type DistanceFieldContext*[TFloat] = ref object
+    data: seq[TFloat]
+    xdist: seq[int16]
+    ydist: seq[int16]
+    gx: seq[TFloat]
+    gy: seq[TFloat]
+    outside: seq[TFloat]
+    inside: seq[TFloat]
+
+proc newDistanceFieldContext*(sz: int = 64 * 32): DistanceFieldContext[float32] =
+    result.new()
+    let c = result
+    c.xdist = newTypedSeq(int16, sz)
+    c.ydist = newTypedSeq(int16, sz)
+    c.gx = newTypedSeq(float32, sz)
+    c.gy = newTypedSeq(float32, sz)
+    c.outside = newTypedSeq(float32, sz)
+    c.inside = newTypedSeq(float32, sz)
+
+proc resizeBuffers[TFloat](c: DistanceFieldContext[TFloat], sz: int) =
+    c.xdist.setTypedSeqLen(sz)
+    c.ydist.setTypedSeqLen(sz)
+    c.gx.setTypedSeqLen(sz)
+    c.gy.setTypedSeqLen(sz)
+    c.outside.setTypedSeqLen(sz)
+    c.inside.setTypedSeqLen(sz)
+
+proc make_distance_map*[TFloat: SomeReal](c: DistanceFieldContext[TFloat], data: var openarray[TFloat], width, height: int) =
     let sz = (width * height).int
-    var xdist = newTypedSeq(int16, sz)
-    var ydist = newTypedSeq(int16, sz)
-    var gx = newTypedSeq(TFloat, sz)
-    var gy = newTypedSeq(TFloat, sz)
-    var outside = newTypedSeq(TFloat, sz)
-    var inside = newTypedSeq(TFloat, sz)
 
     var img_min = TFloat(255)
     var img_max = TFloat(-255)
@@ -473,47 +498,80 @@ proc make_distance_map*[TFloat: SomeReal](data: var openarray[TFloat], width, he
         data[i] = (data[i] - img_min) / img_max
 
     # Compute outside = edtaa3(bitmap); % Transform background (0's)
-    computegradient(data, width, height, gx, gy)
-    edtaa3(data, gx, gy, width, height, xdist, ydist, outside)
+    computegradient(data, width, height, c.gx, c.gy)
+    edtaa3(data, c.gx, c.gy, width, height, c.xdist, c.ydist, c.outside)
 
     for i in 0 ..< sz:
-        if outside[i] < 0:
-            outside[i] = 0
+        if c.outside[i] < 0:
+            c.outside[i] = 0
 
     # Compute inside = edtaa3(1-bitmap); % Transform foreground (1's)
-    gx.applyIt(0)
-    gy.applyIt(0)
+    c.gx.applyIt(0)
+    c.gy.applyIt(0)
 
     for i in 0 ..< sz: data[i] = 1 - data[i]
 
-    computegradient(data, width, height, gx, gy)
-    edtaa3(data, gx, gy, width, height, xdist, ydist, inside)
+    computegradient(data, width, height, c.gx, c.gy)
+    edtaa3(data, c.gx, c.gy, width, height, c.xdist, c.ydist, c.inside)
 
     for i in 0 ..< sz:
-        if inside[i] < 0:
-            inside[i] = 0
+        if c.inside[i] < 0:
+            c.inside[i] = 0
 
     # distmap = outside - inside; % Bipolar distance field
     for i in 0 ..< sz:
-        var o = outside[i]
-        o = o - inside[i]
+        var o = c.outside[i]
+        o = o - c.inside[i]
         o = 128 + o * 16
         if o < 0: o = 0
         if o > 255: o = 255
         data[i] = o
 
+proc make_distance_map*[TFloat: SomeReal](data: var openarray[TFloat], width, height: int) =
+    let sz = (width * height).int
+    let ctx = newDistanceFieldContext(sz)
+    ctx.make_distance_map(data, width, height)
+
+proc make_distance_map*[TFloat: SomeReal](c: DistanceFieldContext[TFloat], width, height: int) {.inline.} =
+    c.make_distance_map(c.data, width, height)
+
 proc make_distance_map*(img: var openarray[byte], width, height : int) =
     let sz = (width * height).int
-    var data = newTypedSeq(float64, sz)
+    let c = newDistanceFieldContext(sz)
+    c.data = newTypedSeq(float32, sz)
 
     # Convert img into double (data)
     for i in 0 ..< sz:
-        data[i] = type(data[i])(img[i])
+        c.data[i] = type(c.data[i])(img[i])
 
-    make_distance_map(data, width, height)
+    make_distance_map(c, width, height)
 
     # Convert back
     for i in 0 ..< sz:
-        img[i] = (255.byte - data[i].byte)
+        img[i] = (255.byte - c.data[i].byte)
+
+proc make_distance_map*[TFloat](c: DistanceFieldContext[TFloat], img: var openarray[byte], x, y, width, height, stride: int) =
+    let sz = (width * height).int
+    c.resizeBuffers(sz)
+    if c.data.isNil:
+        c.data = newTypedSeq(TFloat, sz)
+    else:
+        c.data.setTypedSeqLen(sz)
+
+    var i = 0
+    # Convert img into double (data)
+    for iy in y ..< height + y:
+        for ix in x ..< width + x:
+            c.data[i] = type(c.data[i])(img[iy * stride + ix])
+            inc i
+
+    c.make_distance_map(width, height)
+
+    # Convert back
+    i = 0
+    for iy in y ..< height + y:
+        for ix in x ..< width + x:
+            img[iy * stride + ix] = (255.byte - c.data[i].byte)
+            inc i
 
 {.pop.}
