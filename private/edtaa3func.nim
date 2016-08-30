@@ -466,12 +466,12 @@ type DistanceFieldContext*[TFloat] = ref object
 proc newDistanceFieldContext*(sz: int = 64 * 32): DistanceFieldContext[float32] =
     result.new()
     let c = result
-    c.xdist = newTypedSeq(int16, sz)
-    c.ydist = newTypedSeq(int16, sz)
-    c.gx = newTypedSeq(float32, sz)
-    c.gy = newTypedSeq(float32, sz)
-    c.outside = newTypedSeq(float32, sz)
-    c.inside = newTypedSeq(float32, sz)
+    shallowCopy c.xdist, newTypedSeq(int16, sz)
+    shallowCopy c.ydist, newTypedSeq(int16, sz)
+    shallowCopy c.gx, newTypedSeq(float32, sz)
+    shallowCopy c.gy, newTypedSeq(float32, sz)
+    shallowCopy c.outside, newTypedSeq(float32, sz)
+    shallowCopy c.inside, newTypedSeq(float32, sz)
 
 proc resizeBuffers[TFloat](c: DistanceFieldContext[TFloat], sz: int) =
     c.xdist.setTypedSeqLen(sz)
