@@ -1,5 +1,5 @@
 # Package
-version = "0.2.2"
+version = "0.2.3"
 author = "Yuriy Glukhov"
 description = "TTF library"
 license = "BSD"

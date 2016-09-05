@@ -438,24 +438,21 @@ proc edtaa3[TFloat](img, gx, gy: openarray[TFloat], w, h: int, distx, disty: var
             dec y
 
 when defined(js):
-    proc newSeqFloat32(sz: int): seq[float32] {.importc: "new Float32Array".}
-    proc newSeqFloat64(sz: int): seq[float64] {.importc: "new Float64Array".}
-    proc newSeqInt16(sz: int): seq[int16] {.importc: "new Int16Array".}
-
-    template newTypedSeq(T: typedesc, sz: int): expr =
-        when T is float32: newSeqFloat32(sz)
-        elif T is float64: newSeqFloat64(sz)
-        elif T is int16: newSeqInt16(sz)
-        else: {.error: "Wrong type for typed seq".}
+    proc newTypedSeq(t: typedesc[float32], sz: int): seq[float32] {.importc: "new Float32Array".}
+    proc newTypedSeq(t: typedesc[float64], sz: int): seq[float64] {.importc: "new Float64Array".}
+    proc newTypedSeq(t: typedesc[int16], sz: int): seq[int16] {.importc: "new Int16Array".}
+    proc newTypedSeq(t: typedesc[int8], sz: int): seq[int8] {.importc: "new Int8Array".}
+    proc newTypedSeq(t: typedesc[byte], sz: int): seq[byte] {.importc: "new Uint8Array".}
 
     template setTypedSeqLen[T](s: var seq[T], sz: int) =
-        s = newTypedSeq(T, sz) # TODO: This should be optimized
+        if s.len < sz: shallowCopy(s, newTypedSeq(type(s[0]), sz))
 else:
     template newTypedSeq(T: typedesc, sz: int): expr = newSeq[T](sz)
     template setTypedSeqLen[T](s: var seq[T], sz: int) = s.setLen(sz)
 
 type DistanceFieldContext*[TFloat] = ref object
     data: seq[TFloat]
+    output*: seq[byte]
     xdist: seq[int16]
     ydist: seq[int16]
     gx: seq[TFloat]
@@ -550,11 +547,11 @@ proc make_distance_map*(img: var openarray[byte], width, height : int) =
     for i in 0 ..< sz:
         img[i] = (255.byte - c.data[i].byte)
 
-proc make_distance_map*[TFloat](c: DistanceFieldContext[TFloat], img: var openarray[byte], x, y, width, height, stride: int) =
+proc make_distance_map*[TFloat](c: DistanceFieldContext[TFloat], img: var openarray[byte], x, y, width, height, stride: int, copyBack: bool = true) =
     let sz = (width * height).int
     c.resizeBuffers(sz)
     if c.data.isNil:
-        c.data = newTypedSeq(TFloat, sz)
+        shallowCopy(c.data, newTypedSeq(TFloat, sz))
     else:
         c.data.setTypedSeqLen(sz)
 
@@ -569,9 +566,17 @@ proc make_distance_map*[TFloat](c: DistanceFieldContext[TFloat], img: var openar
 
     # Convert back
     i = 0
-    for iy in y ..< height + y:
-        for ix in x ..< width + x:
-            img[iy * stride + ix] = (255.byte - c.data[i].byte)
-            inc i
+    if copyBack:
+        for iy in y ..< height + y:
+            for ix in x ..< width + x:
+                img[iy * stride + ix] = (255.byte - c.data[i].byte)
+                inc i
+    else:
+        if c.output.isNil:
+            shallowCopy(c.output, newTypedSeq(byte, sz))
+        else:
+            c.output.setTypedSeqLen(sz)
+        for i in 0 ..< sz:
+            c.output[i] = (255.byte - c.data[i].byte)
 
 {.pop.}
