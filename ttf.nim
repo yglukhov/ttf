@@ -1436,8 +1436,8 @@ proc stbtt_GetGlyphBitmapBoxSubpixel(info: stbtt_fontinfo, glyph: cint, scale_x,
         # move to integral bboxes (treating pixels as little squares, what pixels get touched)?
         if not ix0.isNil: ix0[] = floor( x0.cfloat * scale_x + shift_x).cint
         if not iy0.isNil: iy0[] = floor(-y1.cfloat * scale_y + shift_y).cint
-        if not ix1.isNil: ix1[] = ceil ( x1.cfloat * scale_x + shift_x).cint
-        if not iy1.isNil: iy1[] = ceil (-y0.cfloat * scale_y + shift_y).cint
+        if not ix1.isNil: ix1[] = ceil( x1.cfloat * scale_x + shift_x).cint
+        if not iy1.isNil: iy1[] = ceil(-y0.cfloat * scale_y + shift_y).cint
 
 proc stbtt_GetGlyphBitmapBox(info: stbtt_fontinfo, glyph: cint, scale_x, scale_y: cfloat, ix0, iy0, ix1, iy1: ptr cint) {.exportc.} =
     stbtt_GetGlyphBitmapBoxSubpixel(info, glyph, scale_x, scale_y, 0.0, 0.0, ix0, iy0, ix1, iy1)
