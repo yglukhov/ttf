@@ -1470,6 +1470,7 @@ type stbtt_hheap {.exportc.} = object
 {.push stackTrace: off.}
 proc stbtt_hheap_alloc(hh: ptr stbtt_hheap, size: csize, userdata: pointer): pointer {.exportc.} =
    {.emit: """
+   (void)(sizeof(`stbtt_hheap_chunk`)); // Fix nim bug
    if (`hh`->first_free) {
       void *p = `hh`->first_free;
       `hh`->first_free = * (void **) p;
