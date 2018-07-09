@@ -86,7 +86,7 @@ proc edtaa3[TFloat](img, gx, gy: openarray[TFloat], w, h: int, distx, disty: var
     const epsilon = 1e-3
 
     # Shorthand template: add ubiquitous parameters dist, gx, gy, img and w and call distaa3()
-    template DISTAA(c, xc, yc, xi, yi): expr = distaa3(img, gx, gy, w, c, xc, yc, xi, yi)
+    template DISTAA(c, xc, yc, xi, yi): untyped = distaa3(img, gx, gy, w, c, xc, yc, xi, yi)
 
     # Initialize index offsets for the current image width
     let offset_u = -w
@@ -447,7 +447,7 @@ when defined(js):
     template setTypedSeqLen[T](s: var seq[T], sz: int) =
         if s.len < sz: shallowCopy(s, newTypedSeq(type(s[0]), sz))
 else:
-    template newTypedSeq(T: typedesc, sz: int): expr = newSeq[T](sz)
+    template newTypedSeq(T: typedesc, sz: int): untyped = newSeq[T](sz)
     template setTypedSeqLen[T](s: var seq[T], sz: int) = s.setLen(sz)
 
 type DistanceFieldContext*[TFloat] = ref object
