@@ -4,12 +4,12 @@ proc findFileInPaths(name: string, paths: varargs[string]): string =
     for p in paths:
         result = p / name
         if fileExists(result): return
-    result = nil
+    result = ""
 
 proc findFile(name: string): string = findFileInPaths(name, ".", "tests")
 
 let fontPath = findFile("Arial.ttf")
-doAssert(not fontPath.isNil, "Font file not found")
+doAssert(fontPath.len != 0, "Font file not found")
 
 var rawData = readFile(fontPath)
 
