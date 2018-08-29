@@ -73,7 +73,7 @@ proc saveBitmap(filename: string, data: openarray[byte], w, h: int) =
     s.close()
 
 let expectedPath = findFile("expected.bmp")
-doAssert(not expectedPath.isNil, "expected.bmp not found")
+doAssert(expectedPath.len != 0, "expected.bmp not found")
 
 saveBitmap("actual.bmp", bitmap, b_w, b_h)
 doAssert(sameFileContent("actual.bmp", expectedPath))
@@ -82,7 +82,7 @@ doAssert(sameFileContent("actual.bmp", expectedPath))
 import private.edtaa3func
 
 let expectedDFPath = findFile("expected_df.bmp")
-doAssert(not expectedDFPath.isNil, "expected.bmp not found")
+doAssert(expectedDFPath.len != 0, "expected.bmp not found")
 
 make_distance_map(bitmap, b_w, b_h)
 saveBitmap("actual_df.bmp", bitmap, b_w, b_h)

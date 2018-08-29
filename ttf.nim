@@ -1308,11 +1308,7 @@ proc stbtt_GetGlyphShape(info: stbtt_fontinfo, glyph_index: cint): seq[stbtt_ver
               v.cx = (m * (mtx[0] * x.cfloat + mtx[2] * y.cfloat + mtx[4])).stbtt_vertex_type
               v.cy = (n * (mtx[1] * x.cfloat + mtx[3] * y.cfloat + mtx[5])).stbtt_vertex_type
 
-           # Append vertices.
-           if vertices.isNil:
-               vertices = comp_verts
-           else:
-               vertices.add(comp_verts)
+           vertices.add(comp_verts)
            num_vertices += comp_verts.len.cint
 
         # More components ?
@@ -1324,7 +1320,7 @@ proc stbtt_GetGlyphShape(info: stbtt_fontinfo, glyph_index: cint): seq[stbtt_ver
      # numberOfCounters == 0, do nothing
      discard
 
-  if vertices.isNil:
+  if vertices.len == 0:
     return @[]
 
   if num_vertices > 0:
@@ -2060,7 +2056,7 @@ proc stbtt_Rasterize(
     let scale = min(scale_x, scale_y)
     var winding_lengths = newSeq[cint]()
     var windings = stbtt_FlattenCurves(vertices, cfloat(flatness_in_pixels / scale), winding_lengths);
-    if not windings.isNil:
+    if windings.len != 0:
         stbtt_rasterize(result, windings, winding_lengths, scale_x, scale_y, shift_x, shift_y, x_off, y_off, invert, userdata)
         #if not winding_lengths.isNil: dealloc(winding_lengths)
         #if not windings.isNil: dealloc(windings)
