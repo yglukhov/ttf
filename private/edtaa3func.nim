@@ -550,10 +550,7 @@ proc make_distance_map*(img: var openarray[byte], width, height : int) =
 proc make_distance_map*[TFloat](c: DistanceFieldContext[TFloat], img: var openarray[byte], x, y, width, height, stride: int, copyBack: bool = true) =
     let sz = (width * height).int
     c.resizeBuffers(sz)
-    if c.data.isNil:
-        shallowCopy(c.data, newTypedSeq(TFloat, sz))
-    else:
-        c.data.setTypedSeqLen(sz)
+    c.data.setTypedSeqLen(sz)
 
     var i = 0
     # Convert img into double (data)
@@ -572,10 +569,7 @@ proc make_distance_map*[TFloat](c: DistanceFieldContext[TFloat], img: var openar
                 img[iy * stride + ix] = (255.byte - c.data[i].byte)
                 inc i
     else:
-        if c.output.isNil:
-            shallowCopy(c.output, newTypedSeq(byte, sz))
-        else:
-            c.output.setTypedSeqLen(sz)
+        c.output.setTypedSeqLen(sz)
         for i in 0 ..< sz:
             c.output[i] = (255.byte - c.data[i].byte)
 
