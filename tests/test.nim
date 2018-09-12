@@ -1,4 +1,4 @@
-import ttf, os, nimBMP, streams, unicode, sequtils
+import ../ttf, os, nimBMP, streams, unicode, sequtils
 
 proc findFileInPaths(name: string, paths: varargs[string]): string =
     for p in paths:
@@ -79,7 +79,7 @@ saveBitmap("actual.bmp", bitmap, b_w, b_h)
 doAssert(sameFileContent("actual.bmp", expectedPath))
 
 # Test distance fields
-import private.edtaa3func
+import ../ttf/edtaa3func
 
 let expectedDFPath = findFile("expected_df.bmp")
 doAssert(expectedDFPath.len != 0, "expected.bmp not found")
@@ -87,3 +87,4 @@ doAssert(expectedDFPath.len != 0, "expected.bmp not found")
 make_distance_map(bitmap, b_w, b_h)
 saveBitmap("actual_df.bmp", bitmap, b_w, b_h)
 doAssert(sameFileContent("actual_df.bmp", expectedDFPath))
+
