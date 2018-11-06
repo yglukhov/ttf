@@ -585,7 +585,7 @@ struct stbtt_pack_context {
 # FONT LOADING
 #
 #
-type font_type* {.unchecked.} = array[999999999, uint8]
+type font_type* = UncheckedArray[uint8]
 
 
 # The following structure is defined publically so you can declare one on
@@ -860,10 +860,10 @@ proc ttLONG(p: font_type, idx: int): int32 = (p[idx].int32 shl 24) + (p[idx + 1]
 {.pop.}
 
 
-proc stbtt_tag4(p: openarray[uint8], idx: int, c0, c1, c2, c3: char): bool =
+proc stbtt_tag4(p: font_type, idx: int, c0, c1, c2, c3: char): bool =
     p[idx].char == c0 and p[idx + 1].char == c1 and p[idx + 2].char == c2 and p[idx + 3].char == c3
 
-proc stbtt_tag(p: openarray[uint8], idx: int, str: cstring): bool =
+proc stbtt_tag(p: font_type, idx: int, str: cstring): bool =
     stbtt_tag4(p, idx, str[0], str[1], str[2], str[3])
 
 proc stbtt_isfont(font: font_type): bool {.exportc.} =
