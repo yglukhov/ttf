@@ -478,7 +478,7 @@ proc resizeBuffers[TFloat](c: DistanceFieldContext[TFloat], sz: int) =
     c.outside.setTypedSeqLen(sz)
     c.inside.setTypedSeqLen(sz)
 
-proc make_distance_map*[TFloat: SomeReal](c: DistanceFieldContext[TFloat], data: var openarray[TFloat], width, height: int) =
+proc make_distance_map*[TFloat: SomeFloat](c: DistanceFieldContext[TFloat], data: var openarray[TFloat], width, height: int) =
     let sz = (width * height).int
 
     var img_min = TFloat(255)
@@ -524,12 +524,12 @@ proc make_distance_map*[TFloat: SomeReal](c: DistanceFieldContext[TFloat], data:
         if o > 255: o = 255
         data[i] = o
 
-proc make_distance_map*[TFloat: SomeReal](data: var openarray[TFloat], width, height: int) =
+proc make_distance_map*[TFloat: SomeFloat](data: var openarray[TFloat], width, height: int) =
     let sz = (width * height).int
     let ctx = newDistanceFieldContext(sz)
     ctx.make_distance_map(data, width, height)
 
-proc make_distance_map*[TFloat: SomeReal](c: DistanceFieldContext[TFloat], width, height: int) {.inline.} =
+proc make_distance_map*[TFloat: SomeFloat](c: DistanceFieldContext[TFloat], width, height: int) {.inline.} =
     c.make_distance_map(c.data, width, height)
 
 proc make_distance_map*(img: var openarray[byte], width, height : int) =
