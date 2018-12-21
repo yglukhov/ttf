@@ -2037,8 +2037,6 @@ proc stbtt_FlattenCurves(vertices: openarray[stbtt_vertex], objspace_flatness: c
                                         objspace_flatness_squared, 0)
                     x = v.x.float
                     y = v.y.float
-                else:
-                    discard
 
         contour_lengths[n] = num_points - start
 
