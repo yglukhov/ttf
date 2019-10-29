@@ -931,7 +931,7 @@ proc stbtt_InitFont*(info: var stbtt_fontinfo, data: ptr font_type, fontstart: c
     let numTables = ttUSHORT(data[], cmap.int + 2).int
     info.index_map = 0
 
-    for i in 0 .. < numTables:
+    for i in 0 ..< numTables:
         let encoding_record = cmap.int + 4 + 8 * i
         # find an encoding we understand:
         case ttUSHORT(data[], encoding_record).PlatformId:
