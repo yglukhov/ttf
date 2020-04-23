@@ -5086,3 +5086,33 @@ proc stbtt_GetFontVMetricsImpl(info: stbtt_fontinfo, ascent, descent, lineGap: v
 
 proc stbtt_GetFontVMetrics*(info: stbtt_fontinfo, ascent, descent, lineGap: var cint) =
   stbtt_GetFontVMetricsImpl(info, ascent, descent, lineGap)
+
+proc stbtt_ScaleForPixelHeightImpl(info: stbtt_fontinfo, pixels: cfloat): cfloat {.importc: "stbtt_ScaleForPixelHeight", nodecl.}
+
+proc stbtt_ScaleForPixelHeight*(info: stbtt_fontinfo, pixels: cfloat): cfloat =
+  stbtt_ScaleForPixelHeightImpl(info, pixels)
+
+proc stbtt_GetCodepointBitmapBoxSubpixelImpl(info: stbtt_fontinfo, codepoint: cint, scale_x, scale_y, shift_x, shift_y: cfloat, ix0, iy0, ix1, iy1: ptr cint) {.importc: "stbtt_GetCodepointBitmapBoxSubpixel", nodecl.}
+
+proc stbtt_GetCodepointBitmapBoxSubpixel*(info: stbtt_fontinfo, codepoint: cint, scale_x, scale_y, shift_x, shift_y: cfloat, ix0, iy0, ix1, iy1: ptr cint) =
+  stbtt_GetCodepointBitmapBoxSubpixelImpl(info, codepoint, scale_x, scale_y, shift_x, shift_y, ix0, iy0, ix1, iy1)
+
+proc stbtt_GetCodepointBitmapBoxImpl(info: stbtt_fontinfo, codepoint: cint, scale_x, scale_y: cfloat, ix0, iy0, ix1, iy1: ptr cint) {.importc: "stbtt_GetCodepointBitmapBox", nodecl.}
+
+proc stbtt_GetCodepointBitmapBox*(info: stbtt_fontinfo, codepoint: cint, scale_x, scale_y: cfloat, ix0, iy0, ix1, iy1: ptr cint) =
+  stbtt_GetCodepointBitmapBoxImpl(info, codepoint, scale_x, scale_y, ix0, iy0, ix1, iy1)
+
+proc stbtt_MakeCodepointBitmapImpl(info: stbtt_fontinfo, output: ptr byte, out_w, out_h, out_stride: cint, scale_x, scale_y: cfloat, codepoint: cint) {.importc: "stbtt_MakeCodepointBitmap", nodecl.}
+
+proc stbtt_MakeCodepointBitmap*(info: stbtt_fontinfo, output: ptr byte, out_w, out_h, out_stride: cint, scale_x, scale_y: cfloat, codepoint: cint) =
+  stbtt_MakeCodepointBitmapImpl(info, output, out_w, out_h, out_stride, scale_x, scale_y, codepoint)
+
+proc stbtt_GetCodepointHMetricsImpl(info: stbtt_fontinfo, codepoint: cint, advanceWidth, leftSideBearing: var cint) {.importc: "stbtt_GetCodepointHMetrics", nodecl.}
+
+proc stbtt_GetCodepointHMetrics*(info: stbtt_fontinfo, codepoint: cint, advanceWidth, leftSideBearing: var cint) =
+  stbtt_GetCodepointHMetricsImpl(info, codepoint, advanceWidth, leftSideBearing)
+
+proc stbtt_GetCodepointKernAdvanceImpl(info: stbtt_fontinfo, ch1, ch2: cint): cint {.importc: "stbtt_GetCodepointKernAdvance", nodecl.}
+
+proc stbtt_GetCodepointKernAdvance*(info: stbtt_fontinfo, ch1, ch2: cint): cint =
+  stbtt_GetCodepointKernAdvanceImpl(info, ch1, ch2)
