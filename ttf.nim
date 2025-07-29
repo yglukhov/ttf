@@ -2,6 +2,9 @@ proc STBTT_malloc_nim(size: int, userdata: pointer): pointer = alloc(size)
 proc STBTT_free_nim(data: pointer, userdata: pointer) =
   if not data.isNil: dealloc(data)
 
+when defined(gcc) or defined(clang):
+  {.localPassc: "-Wno-incompatible-pointer-types".}
+
 {.emit: """
 
 #define STB_TRUETYPE_IMPLEMENTATION
